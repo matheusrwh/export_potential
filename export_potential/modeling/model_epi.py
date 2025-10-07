@@ -45,7 +45,7 @@ total_projected_import = df_epi['projected_import_value'].sum()
 total_epi_score = df_epi['epi_score'].sum()
 scaling_factor = total_projected_import / total_epi_score
 
-print(df_epi['epi_score'].sum())
+#print(df_epi['epi_score'].sum())
 
 df_epi = df_epi.with_columns([
     (pl.col('epi_score') * scaling_factor).alias('epi_score_normalized')

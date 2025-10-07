@@ -27,9 +27,9 @@ df_shares_sc = df_shares_sc.with_columns([
     pl.col('sh6').cast(pl.Int64)
 ])
 
-df_shares_sc = df_shares_sc.melt(
-    id_vars=['sh6'],
-    value_vars=[col for col in df_shares_sc.columns if col != 'sh6'],
+df_shares_sc = df_shares_sc.unpivot(
+    index=['sh6'],
+    on=[col for col in df_shares_sc.columns if col != 'sh6'],
     variable_name='ano',
     value_name='share_sc'
 )
@@ -99,10 +99,10 @@ df_all_bra.shape
 
 
 ########## Projecting exports for SC ##########
-acc_growth = 1.195
+acc_growth_gdp = 1.195
 
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('weighted_exports_sc') * acc_growth).alias('proj_exports_sc_2027')
+    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2027')
 ])
 
 ########## Projecting exports for all countries ##########
@@ -184,3 +184,11 @@ df_supply_sc = df_supply_sc.sort('sc_share_proj_2027', descending=True)
 df_supply_sc.head()
 
 df_supply_sc.write_parquet(data_processed / 'supply_potential_sc.parquet')
+
+
+
+'''
+################################################################
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+################################################################
+'''

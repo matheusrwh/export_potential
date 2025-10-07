@@ -159,3 +159,11 @@ df_demand = df_demand.select([
 ])
 
 df_demand.write_parquet(data_processed / 'demand_potential.parquet')
+
+
+
+'''
+################################################################
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+################################################################
+'''

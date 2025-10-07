@@ -83,9 +83,9 @@ df_shares_sc = df_shares_sc.with_columns([
     pl.col('sh6').cast(pl.Int64)
 ])
 
-df_shares_sc = df_shares_sc.melt(
-    id_vars=['sh6'],
-    value_vars=[col for col in df_shares_sc.columns if col != 'sh6'],
+df_shares_sc = df_shares_sc.unpivot(
+    index=['sh6'],
+    on=[col for col in df_shares_sc.columns if col != 'sh6'],
     variable_name='ano',
     value_name='share_sc'
 )
@@ -99,12 +99,57 @@ df_shares_sc.head()
 df_all_bra.head()
 df_all_bra.shape
 
+df_all_bra = df_all_bra.join(
+    df_shares_sc,
+    left_on=['sh6', 'year'],
+    right_on=['sh6', 'ano'],
+    how='left'
+)
+
+df_all_bra = df_all_bra.with_columns([
+    (pl.col('value') * pl.col('share_sc')).alias('value_sc')
+])
+
+# Calculating weighted average of exports of SC over the last 5 years
+pesos = [0.2, 0.4, 0.6, 0.8, 1.0]
+
+recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:5]
+df_recent = df_all_bra.filter(pl.col('year').is_in(recent_years))
+
+weighted_exports = (
+    df_recent
+    .with_columns([
+        pl.when(pl.col('year') == recent_years[0]).then(pesos[4])
+         .when(pl.col('year') == recent_years[1]).then(pesos[3])
+         .when(pl.col('year') == recent_years[2]).then(pesos[2])
+         .when(pl.col('year') == recent_years[3]).then(pesos[1])
+         .when(pl.col('year') == recent_years[4]).then(pesos[0])
+         .otherwise(0)
+         .alias('peso')
+    ])
+    .with_columns([
+        (pl.col('value_sc') * pl.col('peso')).alias('weighted_value_sc')
+    ])
+    .group_by(['exporter', 'importer', 'sh6', 'product_description'])
+    .agg([
+        (pl.sum('weighted_value_sc') / pl.sum('peso')).alias('weighted_exports_sc')
+    ])
+)
+
+df_all_bra = df_all_bra.join(
+    weighted_exports.select(['exporter', 'importer', 'sh6', 'weighted_exports_sc']),
+    on=['exporter', 'importer', 'sh6'],
+    how='left'
+)
+
+df_all_bra = df_all_bra.filter(pl.col('year') == 2023)
+
 df_bilateral = df_all_bra.group_by(['exporter', 'importer']).agg([
-    pl.sum('value').alias('bilateral_exports_sc')
+    pl.sum('weighted_exports_sc').alias('bilateral_exports_sc')
 ])
 
 df_bilateral_sh6 = df_all_bra.group_by(['exporter', 'importer', 'sh6']).agg([
-    pl.sum('value').alias('bilateral_exports_sc_sh6')
+    pl.sum('weighted_exports_sc').alias('bilateral_exports_sc_sh6')
 ])
 
 df_bilateral.head()
@@ -126,18 +171,14 @@ df_demand = df_demand.join(
 )
 
 df_ease = df_demand.select(['importer', 'sh6', 'product_description',
-                            'projected_import_value', 'sc_share_proj_2027'])
+                            'weighted_imports', 'sc_share_proj_2027'])
 
 df_ease = df_ease.with_columns([
-    (pl.col('projected_import_value') * pl.col('sc_share_proj_2027')).alias('value_sc')
-])
-
-df_ease = df_ease.with_columns([
-    (pl.col('value_sc').sum().over('importer')).alias('sum_value_sc')
+    (pl.col('weighted_imports') * pl.col('sc_share_proj_2027')).alias('value_sc')
 ])
 
 df_ease = df_ease.group_by(['importer']).agg([
-    pl.max('sum_value_sc').alias('sum_value_sc')
+    pl.sum('value_sc').alias('sum_value_sc')
 ])
 
 df_ease = df_ease.sort('sum_value_sc', descending=True)

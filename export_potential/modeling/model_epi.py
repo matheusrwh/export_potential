@@ -41,14 +41,20 @@ df_epi = df_epi.sort('epi_score', descending=True)
 
 df_epi = df_epi.filter(pl.col('epi_score').is_not_nan())
 
-total_projected_import = df_epi['projected_import_value'].sum()
-total_epi_score = df_epi['epi_score'].sum()
-scaling_factor = total_projected_import / total_epi_score
+# Normalização do epi_score para cada par (importer, sh6)
+df_epi = df_epi.with_columns([
+    pl.col('epi_score').fill_null(0).alias('epi_score')
+])
 
-#print(df_epi['epi_score'].sum())
+grouped = df_epi.group_by(['importer', 'sh6']).agg([
+    pl.col('epi_score').sum().alias('sum_epi_score'),
+    pl.col('projected_import_value').sum().alias('sum_projected_import_value')
+])
+
+df_epi = df_epi.join(grouped, on=['importer', 'sh6'], how='left')
 
 df_epi = df_epi.with_columns([
-    (pl.col('epi_score') * scaling_factor).alias('epi_score_normalized')
+    (pl.col('epi_score') * pl.col('sum_projected_import_value') / pl.col('sum_epi_score')).alias('epi_score_normalized')
 ])
 
 df_epi = df_epi.with_columns([
@@ -56,8 +62,7 @@ df_epi = df_epi.with_columns([
 ])
 
 df_epi = df_epi.with_columns([
-    (pl.col('epi_score_normalized') - pl.col('bilateral_exports_sc_sh6')).alias('potential_value_sc'),
-    (pl.col('epi_score_normalized') - pl.col('projected_import_value')).alias('potential_value_total')
+    (pl.col('epi_score_normalized') - pl.col('bilateral_exports_sc_sh6')).alias('potential_value_sc')
 ])
 
 df_epi = df_epi.with_columns([
@@ -67,17 +72,16 @@ df_epi = df_epi.with_columns([
       .alias('potential_value_sc')
 ])
 
-df_epi = df_epi.with_columns([
-    pl.when(pl.col('potential_value_total') < 0)
-      .then(0)
-      .otherwise(pl.col('potential_value_total'))
-      .alias('potential_value_total')
-])
-
 df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
                         'bilateral_exports_sc_sh6', 'projected_import_value', 'epi_score_normalized',
-                        'potential_value_sc', 'potential_value_total'])
+                        'potential_value_sc'])
 
 df_epi.head()
+
+df_epi_doors = df_epi.filter(
+    pl.col('sh6') == 441820
+)
+
+df_epi_doors.write_excel(data_processed / 'epi_scores_doors.xlsx')
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

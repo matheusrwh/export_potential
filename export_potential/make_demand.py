@@ -154,6 +154,7 @@ df_demand = df_demand.select([
     'importer',
     'sh6',
     'product_description',
+    'weighted_imports',
     'demand_index_2027',
     'projected_import_value'
 ])

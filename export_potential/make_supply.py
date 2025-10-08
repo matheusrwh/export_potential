@@ -1,3 +1,9 @@
+'''
+################################################################
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+################################################################
+'''
+
 import polars as pl
 from pathlib import Path
 
@@ -187,8 +193,3 @@ df_supply_sc.write_parquet(data_processed / 'supply_potential_sc.parquet')
 
 
 
-'''
-################################################################
-SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
-################################################################
-'''

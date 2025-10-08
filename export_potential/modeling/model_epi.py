@@ -41,25 +41,37 @@ df_epi = df_epi.sort('epi_score', descending=True)
 
 df_epi = df_epi.filter(pl.col('epi_score').is_not_nan())
 
+df_epi.head()
+
 #### Normalizing the EPI scores ####
 df_epi = df_epi.with_columns([
-    pl.col('epi_score').fill_null(0).alias('epi_score')
+    pl.col('epi_score').fill_null(0).alias('epi_score'),
+    pl.col('proj_exports_sc_2027').fill_null(0).alias('proj_exports_sc_2027'),
+    pl.col('bilateral_exports_sc_sh6').fill_null(0).alias('bilateral_exports_sc_sh6'),
 ])
 
-grouped = df_epi.group_by(['importer', 'sh6']).agg([
-    pl.col('epi_score').sum().alias('sum_epi_score'),
-    pl.col('projected_import_value').sum().alias('sum_projected_import_value')
-])
+df_alpha = (
+    df_epi
+    .group_by('sh6')
+    .agg([
+        pl.col('epi_score').sum().alias('sum_epi_k'),
+        pl.col('proj_exports_sc_2027').first().alias('proj_exports_sc_2027'),  # usa o valor já existente
+    ])
+    .with_columns([
+        pl.when(pl.col('sum_epi_k') > 0)
+          .then(pl.col('proj_exports_sc_2027') / pl.col('sum_epi_k'))
+          .otherwise(0.0)
+          .alias('alpha_k')
+    ])
+    .select(['sh6','alpha_k'])
+)
 
-df_epi = df_epi.join(grouped, on=['importer', 'sh6'], how='left')
+df_epi = (
+    df_epi
+    .join(df_alpha, on='sh6', how='left')
+    .with_columns((pl.col('epi_score') * pl.col('alpha_k')).alias('epi_score_normalized'))
+)
 
-df_epi = df_epi.with_columns([
-    (pl.col('epi_score') * pl.col('sum_projected_import_value') / pl.col('sum_epi_score')).alias('epi_score_normalized')
-])
-
-df_epi = df_epi.with_columns([
-    pl.col('bilateral_exports_sc_sh6').fill_null(0).alias('bilateral_exports_sc_sh6')
-])
 
 #### Calculating the potential value of SC exports ###
 df_epi = df_epi.with_columns([
@@ -74,7 +86,7 @@ df_epi = df_epi.with_columns([
 ])
 
 df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
-                        'bilateral_exports_sc_sh6', 'projected_import_value', 'epi_score', 'epi_score_normalized',
+                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2027', 'projected_import_value', 'epi_score', 'epi_score_normalized',
                         'unrealized_potential'])
 
 df_epi.head()
@@ -82,5 +94,9 @@ df_epi.head()
 df_epi = df_epi.with_columns([
     (pl.col('bilateral_exports_sc_sh6') / pl.col('unrealized_potential')).alias('realized_potential_sc')
 ])
+
+df_epi_doors = df_epi.filter(pl.col('sh6') == 441820)
+
+df_epi_doors.write_excel('epi_doors.xlsx')
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

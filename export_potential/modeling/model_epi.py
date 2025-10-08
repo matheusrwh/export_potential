@@ -74,7 +74,7 @@ df_epi = df_epi.with_columns([
 ])
 
 df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
-                        'bilateral_exports_sc_sh6', 'projected_import_value', 'epi_score_normalized',
+                        'bilateral_exports_sc_sh6', 'projected_import_value', 'epi_score', 'epi_score_normalized',
                         'unrealized_potential'])
 
 df_epi.head()

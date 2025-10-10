@@ -91,6 +91,4 @@ df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
 
 df_epi.head()
 
-print(df_epi['epi_score'].sum(), df_epi['proj_exports_sc_2027'].sum())
-
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

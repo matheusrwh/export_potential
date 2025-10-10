@@ -91,12 +91,6 @@ df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
 
 df_epi.head()
 
-df_epi = df_epi.with_columns([
-    (pl.col('bilateral_exports_sc_sh6') / pl.col('unrealized_potential')).alias('realized_potential_sc')
-])
-
-df_epi_doors = df_epi.filter(pl.col('sh6') == 441820)
-
-df_epi_doors.write_excel('epi_doors.xlsx')
+print(df_epi['epi_score'].sum(), df_epi['proj_exports_sc_2027'].sum())
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

@@ -13,11 +13,13 @@ df_ease = pl.read_parquet(data_processed / 'ease_of_trade.parquet')
 df_demand = pl.read_parquet(data_processed / 'demand_potential.parquet')
 df_supply = pl.read_parquet(data_processed / 'supply_potential_sc.parquet')
 df_bilateral_sh6 = pl.read_parquet(data_interim / 'bilateral_exports_sh6.parquet')
+df_countries = pl.read_csv(references / 'countries_br.csv', encoding='latin1', separator=';')
 
 df_ease.head()
 df_demand.head()
 df_supply.head()
 df_bilateral_sh6.head()
+df_countries.head()
 
 df_epi = df_supply.join(
     df_demand.select(['importer', 'sh6', 'projected_import_value']),
@@ -90,5 +92,13 @@ df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
                         'unrealized_potential'])
 
 df_epi.head()
+
+df_epi = df_epi.join(
+    df_countries.select([
+        pl.col('CO_PAIS_ISOA3').alias('importer'),
+        pl.col('NO_PAIS').alias('importer_name')]),
+    on='importer',
+    how='left'
+)
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

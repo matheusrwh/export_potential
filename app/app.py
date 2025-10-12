@@ -230,7 +230,7 @@ with tab1:
                 pl.col('epi_score_normalized').alias('Índice PE'),
                 pl.col('categoria').alias('Categoria')
             ]).to_pandas().head(50),
-            use_container_width=False,
+            use_container_width=True,
             hide_index=True
         )
     
@@ -283,7 +283,7 @@ with tab2:
             x=df_selected_pd["bilateral_exports_sc_sh6"],
             y=df_selected_pd["importer_name"],
             mode="markers+lines",
-            name="Exportações bilaterais SC",
+            name="Exportações de SC",
             marker=dict(size=10, color=px.colors.qualitative.Plotly[1], symbol="circle"),
             hovertemplate="País: %{y}<br>Exportações SC: %{x}<extra></extra>",
             xaxis="x2"
@@ -359,7 +359,7 @@ with tab2:
             width=1200,
             height=600,
             legend=dict(
-            title="Categoria",
+            title=None,
             orientation="h",
             x=0.25,
             y=0,

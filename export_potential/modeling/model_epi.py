@@ -3,6 +3,7 @@ from pathlib import Path
 
 ######## Setting the directories ########
 project_root = Path(__file__).resolve().parents[2]
+app = project_root / 'app'
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -13,7 +14,6 @@ df_ease = pl.read_parquet(data_processed / 'ease_of_trade.parquet')
 df_demand = pl.read_parquet(data_processed / 'demand_potential.parquet')
 df_supply = pl.read_parquet(data_processed / 'supply_potential_sc.parquet')
 df_bilateral_sh6 = pl.read_parquet(data_interim / 'bilateral_exports_sh6.parquet')
-df_countries = pl.read_csv(references / 'countries_br.csv', encoding='latin1', separator=';')
 
 df_ease.head()
 df_demand.head()
@@ -45,53 +45,42 @@ df_epi = df_epi.filter(pl.col('epi_score').is_not_nan())
 
 df_epi.head()
 
-#### Normalizing the EPI scores ####
+#### Normalizing the EPI scores between 0 and 1 ####
 df_epi = df_epi.with_columns([
     pl.col('epi_score').fill_null(0).alias('epi_score'),
     pl.col('proj_exports_sc_2027').fill_null(0).alias('proj_exports_sc_2027'),
     pl.col('bilateral_exports_sc_sh6').fill_null(0).alias('bilateral_exports_sc_sh6'),
 ])
 
-df_alpha = (
+# Calculate min and max epi_score per sh6
+df_min_max = (
     df_epi
     .group_by('sh6')
     .agg([
-        pl.col('epi_score').sum().alias('sum_epi_k'),
-        pl.col('proj_exports_sc_2027').first().alias('proj_exports_sc_2027'),  # usa o valor já existente
+        pl.col('epi_score').min().alias('min_epi_score'),
+        pl.col('epi_score').max().alias('max_epi_score'),
     ])
-    .with_columns([
-        pl.when(pl.col('sum_epi_k') > 0)
-          .then(pl.col('proj_exports_sc_2027') / pl.col('sum_epi_k'))
-          .otherwise(0.0)
-          .alias('alpha_k')
-    ])
-    .select(['sh6','alpha_k'])
 )
 
+# Join min/max and normalize
 df_epi = (
     df_epi
-    .join(df_alpha, on='sh6', how='left')
-    .with_columns((pl.col('epi_score') * pl.col('alpha_k')).alias('epi_score_normalized'))
+    .join(df_min_max, on='sh6', how='left')
+    .with_columns([
+        pl.when(pl.col('max_epi_score') != pl.col('min_epi_score'))
+          .then((pl.col('epi_score') - pl.col('min_epi_score')) / (pl.col('max_epi_score') - pl.col('min_epi_score')))
+          .otherwise(0.0)
+          .alias('epi_score_normalized')
+    ])
 )
 
-
-#### Calculating the potential value of SC exports ###
-df_epi = df_epi.with_columns([
-    (pl.col('epi_score_normalized') - pl.col('bilateral_exports_sc_sh6')).alias('unrealized_potential')
-])
-
-df_epi = df_epi.with_columns([
-    pl.when(pl.col('unrealized_potential') < 0)
-      .then(0)
-      .otherwise(pl.col('unrealized_potential'))
-      .alias('unrealized_potential')
-])
-
-df_epi = df_epi.select(['exporter', 'importer', 'sh6', 'product_description',
-                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2027', 'projected_import_value', 'epi_score', 'epi_score_normalized',
-                        'unrealized_potential'])
-
 df_epi.head()
+
+
+################ JOINS E FORMATAÇÃO FINAL ################
+df_countries = pl.read_csv(references / 'countries_br.csv', encoding='latin1', separator=';')
+
+df_countries.head()
 
 df_epi = df_epi.join(
     df_countries.select([
@@ -100,5 +89,28 @@ df_epi = df_epi.join(
     on='importer',
     how='left'
 )
+
+df_epi = df_epi.with_columns([
+    pl.col('sh6').cast(str).str.zfill(6).alias('sh6')
+])
+
+df_products = pl.read_excel(references / 'products_br_mdic.xlsx')
+df_products.head()
+
+df_epi = df_epi.join(
+    df_products,
+    left_on='sh6',
+    right_on='CO_SH6',
+    how='left'
+)
+
+df_epi = df_epi.with_columns([
+    (pl.col('sh6') + ' - ' + pl.col('NO_SH6_POR')).alias('sh6_product')
+])
+
+df_epi = df_epi.rename({'NO_SH6_POR': 'product_description_br'})
+
+df_epi = df_epi.select(['exporter', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br',
+                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2027', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

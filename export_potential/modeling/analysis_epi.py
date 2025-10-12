@@ -32,7 +32,7 @@ df_epi = pl.read_parquet(data_processed / 'epi_scores.parquet')
 df_epi.head()
 
 ######################### AGREGGATING BY PRODUCT #########################
-df_epi_sh6 = df_epi.group_by(['sh6', 'product_description']).agg([
+df_epi_sh6 = df_epi.group_by(['sh6', 'sh6_product', 'product_description_br']).agg([
     pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
     pl.sum('epi_score').alias('epi_score'),
 ])
@@ -56,8 +56,7 @@ df_epi_sh6.write_parquet(app_data / 'epi_scores_sh6.parquet')
 
 ######################### AGREGGATING BY COUNTRY #########################
 df_epi = df_epi.with_columns([
-    pl.col('epi_score_normalized').fill_nan(0),
-    pl.col('unrealized_potential').fill_nan(0)
+    pl.col('epi_score_normalized').fill_nan(0)
 ])
 
 df_epi_country = df_epi.group_by(['importer', 'importer_name']).agg([
@@ -83,3 +82,16 @@ df_epi_country = df_epi_country.sort('epi_score_normalized', descending=True)
 df_epi_country.write_parquet(app_data / 'epi_scores_countries.parquet')
 
 df_epi_country.head()
+
+######################### PRODUCT AND MARKET #########################
+df_epi.head()
+
+df_epi_clustered_list = []
+for sh6, group in df_epi.to_pandas().groupby('sh6'):
+    clustered = clusterize_group(group)
+    df_epi_clustered_list.append(clustered)
+
+df_epi_clustered = pd.concat(df_epi_clustered_list, ignore_index=True)
+df_epi = pl.from_pandas(df_epi_clustered)
+
+df_epi.write_parquet(app_data / 'epi_scores.parquet')

@@ -2,6 +2,7 @@ import streamlit as st
 import polars as pl
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 
 from warnings import filterwarnings
@@ -45,16 +46,32 @@ munic.sort()
 df_epi_sh6 = pl.read_parquet(app / 'data' / 'epi_scores_sh6.parquet')
 df_epi_sh6.head()
 
+df_epi_sh6 = df_epi_sh6.with_columns(
+    pl.col("epi_score_normalized").round(3)
+)
+
+### EPI scores countries ###
 df_epi_countries = pl.read_parquet(app / 'data' / 'epi_scores_countries.parquet')
 df_epi_countries.head()
 
-# Limitar epi_score_normalized a duas casas após a vírgula
-df_epi_sh6 = df_epi_sh6.with_columns(
-    pl.col("epi_score_normalized").round(2)
-)
 df_epi_countries = df_epi_countries.with_columns(
-    pl.col("epi_score_normalized").round(2)
+    pl.col("epi_score_normalized").round(3)
 )
+
+### EPI scores ###
+df_epi = pl.read_parquet(app / 'data' / 'epi_scores.parquet')
+df_epi.head()
+
+df_epi = df_epi.with_columns(
+    pl.col("epi_score_normalized").round(3)
+)
+
+
+
+
+
+
+
 
 ################## APP ########################
 #### SIDEBAR ####
@@ -76,11 +93,18 @@ st.title("Potencial de exportações")
 st.markdown(
     "Indicador de potencial de exportações dos produtos catarinenses construído pelo Observatório FIESC.<br>"
     "Metodologia adaptada do indicador EPI (Export Potential Index) do ITC (International Trade Centre).<br>" \
-    "O indicador incorpora fatores de oferta, demanda e facilidade de comércio para identificar o potencial de exportações por produto, setor e mercados. Mais detalhes na aba Metodologia.",
+    "O indicador incorpora fatores de oferta, demanda e facilidade de comércio para identificar o potencial de exportações por produto, setor e mercados.",
     unsafe_allow_html=True
 )
 
-tab1, tab2, tab3, tab4 = st.tabs(['Produtos', 'Mercados', 'Fornecedores', 'Metodologia'])
+tab1, tab2, tab3, tab4 = st.tabs(['Visão geral', 'Produtos e mercados', 'Fornecedores', 'Metodologia'])
+
+
+
+
+
+
+
 
 #### TAB 1 - PRODUTOS ####
 with tab1:
@@ -88,13 +112,30 @@ with tab1:
     col1, col2 = st.columns([2, 1])
     with col1:
         fig = px.treemap(
-            df_epi_sh6.to_pandas().head(30),
+            df_epi_sh6.to_pandas().head(200),
             title="Produtos (SH6):",
             path=["sh6"],
             values="epi_score_normalized",
             color="categoria",
-            color_discrete_sequence=px.colors.qualitative.Plotly)
+            hover_data={
+                "product_description_br": True,
+                "sh6": True,
+                "epi_score_normalized": True,
+                "categoria": False
+            },
+            color_discrete_sequence=px.colors.qualitative.Plotly
+        )
+
         fig.update_traces(marker=dict(cornerradius=5))
+
+        # Remove parent and id from hovertemplate
+        fig.update_traces(
+            hovertemplate="<br>".join([
+                "SH6: %{label}",
+                "Descrição: %{customdata[0]}",
+                "Índice PE: %{customdata[2]}"
+            ])
+        )
         st.plotly_chart(fig, use_container_width=True)
         
     with col2:
@@ -139,7 +180,13 @@ with tab1:
             size="epi_score_normalized",
             projection="natural earth",
             color_discrete_sequence=px.colors.qualitative.Plotly,
-            size_max=50
+            size_max=50,
+            hover_data={
+                "importer_name": True,
+                "epi_score_normalized": True,
+                "categoria": False,
+                "importer": False
+            }
         )
 
         fig_geo.update_geos(
@@ -152,6 +199,13 @@ with tab1:
             coastlinecolor="white", 
             countrywidth=0.4,      
             coastlinewidth=0.4
+        )
+
+        fig_geo.update_traces(
+            hovertemplate="<br>".join([
+            "País: %{customdata[0]}",
+            "Índice PE: %{customdata[1]}"
+            ])
         )
 
         fig_geo.update_layout(
@@ -181,3 +235,138 @@ with tab1:
         )
     
     st.markdown("<hr style='margin-top: -35px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### TAB 2 - PRODUTOS E MERCADOS ####
+with tab2:
+    sh6_options = sorted([opt for opt in df_epi["sh6_product"].unique().to_list() if opt is not None])
+    selected_sh6 = st.selectbox("**Selecione o código SH6:**", sh6_options, key="sh6_selectbox_tab2")
+
+    ### Columns for layout
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        df_selected = df_epi.filter(pl.col("sh6_product") == selected_sh6).sort("epi_score_normalized", descending=True)
+        df_selected_pd = df_selected.to_pandas().head(25).sort_values("epi_score_normalized", ascending=True)
+        df_selected_pd_map = df_selected.to_pandas().sort_values("epi_score_normalized", ascending=False)
+
+        fig = go.Figure()
+
+        # Bar for EPI index (primary x-axis)
+        second_color = px.colors.qualitative.Plotly[0]
+        fig.add_trace(
+            go.Bar(
+            x=df_selected_pd["epi_score_normalized"],
+            y=df_selected_pd["importer_name"],
+            orientation="h",
+            name="Índice PE",
+            marker_color=second_color,
+            hovertemplate="País: %{y}<br>Índice PE: %{x}<extra></extra>",
+            xaxis="x",
+            )
+        )
+
+        # Scatter for bilateral exports (secondary x-axis)
+        fig.add_trace(
+            go.Scatter(
+            x=df_selected_pd["bilateral_exports_sc_sh6"],
+            y=df_selected_pd["importer_name"],
+            mode="markers+lines",
+            name="Exportações bilaterais SC",
+            marker=dict(size=10, color=px.colors.qualitative.Plotly[1], symbol="circle"),
+            hovertemplate="País: %{y}<br>Exportações SC: %{x}<extra></extra>",
+            xaxis="x2"
+            )
+        )
+
+        fig.update_layout(
+            title="Índice PE e importações dos produtos catarinenses:",
+            xaxis=dict(
+            title="Índice PE",
+            side="bottom",
+            showgrid=False
+            ),
+            xaxis2=dict(
+            title="Montante importado",
+            overlaying="x",
+            side="top",
+            showgrid=False,
+            position=0.98
+            ),
+            legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=0,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(0,0,0,0)'
+            ),
+            height=800,
+            margin=dict(l=0, r=0, t=140, b=0)  # Increased top margin to 140 for more spacing below the title
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        st.markdown("<div style='margin-top: 150px;'></div>", unsafe_allow_html=True)  # Adiciona espaço acima do mapa
+        fig_geo_prod = px.scatter_geo(
+            df_selected_pd_map,
+            locations="importer",
+            locationmode="ISO-3",
+            hover_name="importer",
+            color='categoria',
+            size="epi_score_normalized",
+            projection="natural earth",
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            size_max=50,
+            hover_data={
+                "importer_name": True,
+                "epi_score_normalized": True,
+                "importer": False
+            }
+        )
+
+        fig_geo_prod.update_geos(
+            showcountries=True,
+            countrycolor="white",  
+            showland=True,
+            landcolor="#363d49",   
+            bgcolor="#0e1117",     
+            showcoastlines=True,
+            coastlinecolor="white", 
+            countrywidth=0.4,      
+            coastlinewidth=0.4
+        )
+
+        fig_geo_prod.update_traces(
+            hovertemplate="<br>".join([
+            "País: %{customdata[0]}",
+            "Índice PE: %{customdata[1]}"
+            ])
+        )
+
+        fig_geo_prod.update_layout(
+            width=1200,
+            height=600,
+            legend=dict(
+            title="Categoria",
+            orientation="h",
+            x=0.25,
+            y=0,
+            bgcolor='rgba(0,0,0,0)'
+            )
+        )
+        
+        st.plotly_chart(fig_geo_prod, use_container_width=True)
+
+    st.markdown("<hr style='margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)

@@ -66,9 +66,27 @@ df_epi = df_epi.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
+### Mercados mundiais ###
+df_markets = pl.read_parquet(app / 'data' / 'app_dataset.parquet')
 
+df_markets.head()
 
+df_markets = df_markets.select([
+    pl.col('importer'),
+    pl.col('country_name').alias('importer_name'),
+    pl.col('sh6'),
+    pl.col('description').alias('product_description_br'),
+    pl.col('value'),
+    pl.col('market_share'),
+    pl.col('cagr_5y'),
+    pl.col('share_brazil'),
+    pl.col('share_sc'),
+    pl.col('dist')
+])
 
+df_markets = df_markets.with_columns(
+    (pl.col('sh6') + " - " + pl.col('product_description_br')).alias('sh6_product')
+)
 
 
 
@@ -261,6 +279,8 @@ with tab2:
         df_selected_pd = df_selected.to_pandas().head(25).sort_values("epi_score_normalized", ascending=True)
         df_selected_pd_map = df_selected.to_pandas().sort_values("epi_score_normalized", ascending=False)
 
+        df_selected_markets = df_markets.filter(pl.col("sh6_product") == selected_sh6).sort("value", descending=True)
+
         fig = go.Figure()
 
         # Bar for EPI index (primary x-axis)
@@ -368,5 +388,20 @@ with tab2:
         )
         
         st.plotly_chart(fig_geo_prod, use_container_width=True)
+
+    col3, col4 = st.columns([2, 1])
+    
+    with col3:
+        st.dataframe(
+            df_selected_markets.select([
+                pl.col('importer_name').alias("País"),
+                pl.col('value').alias("Montante US$"),
+                pl.col('market_share').alias("Market Share (%)"),
+                pl.col('cagr_5y').alias("CAGR 5 anos (%)"),
+                pl.col('share_brazil').alias("Share Brasil (%)"),
+                pl.col('share_sc').alias("Share SC (%)"),
+                pl.col('dist').alias("Distância (km)")
+            ])
+        )
 
     st.markdown("<hr style='margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)

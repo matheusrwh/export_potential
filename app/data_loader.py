@@ -17,29 +17,17 @@ def get_paths() -> dict:
         "references": project_root / "references",
     }
 
-
-@st.cache_data(show_spinner=False)
-def load_epi_data() -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Load EPI datasets used across pages, with caching."""
+def load_all_app_data() -> dict:
+    """Lê todos os arquivos da pasta app/data e retorna um dicionário de DataFrames."""
     paths = get_paths()
-    df_epi_sh6 = pl.read_parquet(paths["app"] / "data" / "epi_scores_sh6.parquet")
-    df_epi_countries = pl.read_parquet(paths["app"] / "data" / "epi_scores_countries.parquet")
-    # Round as per original logic
-    df_epi_sh6 = df_epi_sh6.with_columns(pl.col("epi_score_normalized").round(2))
-    df_epi_countries = df_epi_countries.with_columns(pl.col("epi_score_normalized").round(2))
-    return df_epi_sh6, df_epi_countries
-
-
-@st.cache_data(show_spinner=False)
-def load_munic_vp():
-    """Load munic/vp options and return lists for filters."""
-    paths = get_paths()
-    df_munic_vp = pl.read_excel(paths["references"] / "munic_vp.xlsx")
-    vp = sorted(df_munic_vp["vp"].unique().to_list())
-    munic = sorted(df_munic_vp["munic"].unique().to_list())
-    return vp, munic, df_munic_vp
-
-
-# Backwards-compatible helper
-def load_data():
-    return load_epi_data()
+    data_dir = paths["app"] / "data"
+    dfs = {}
+    for file in data_dir.iterdir():
+        if file.suffix == ".parquet":
+            dfs[file.stem] = pl.read_parquet(file)
+        elif file.suffix in [".csv", ".tsv"]:
+            dfs[file.stem] = pl.read_csv(file, separator="\t" if file.suffix == ".tsv" else ",")
+        elif file.suffix in [".xlsx", ".xls"]:
+            dfs[file.stem] = pl.read_excel(file)
+        # Adicione outros formatos conforme necessário
+    return dfs

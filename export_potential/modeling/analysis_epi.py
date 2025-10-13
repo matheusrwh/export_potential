@@ -32,7 +32,7 @@ df_epi = pl.read_parquet(data_processed / 'epi_scores.parquet')
 df_epi.head()
 
 ######################### AGREGGATING BY PRODUCT #########################
-df_epi_sh6 = df_epi.group_by(['sh6', 'sh6_product', 'product_description_br']).agg([
+df_epi_sh6 = df_epi.group_by(['sh6', 'sh6_product', 'product_description_br', 'sc_comp', 'color']).agg([
     pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
     pl.sum('epi_score').alias('epi_score'),
 ])
@@ -95,3 +95,26 @@ df_epi_clustered = pd.concat(df_epi_clustered_list, ignore_index=True)
 df_epi = pl.from_pandas(df_epi_clustered)
 
 df_epi.write_parquet(app_data / 'epi_scores.parquet')
+
+######################### SC COMPETITIVA #########################
+df_epi_comp = df_epi.group_by(['sc_comp', 'color']).agg([
+    pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
+    pl.sum('epi_score').alias('epi_score'),
+])
+
+# Normalizar epi_score entre 0 e 1
+epi_min = df_epi_comp['epi_score'].min()
+epi_max = df_epi_comp['epi_score'].max()
+df_epi_comp = df_epi_comp.with_columns([
+    ((pl.col('epi_score') - epi_min) / (epi_max - epi_min)).alias('epi_score_normalized')
+])
+
+df_epi_comp_pd = df_epi_comp.to_pandas()
+df_epi_comp_clustered = clusterize_group(df_epi_comp_pd)
+df_epi_comp = pl.from_pandas(df_epi_comp_clustered)
+
+df_epi_comp = df_epi_comp.sort('epi_score_normalized', descending=False)
+
+df_epi_comp.write_parquet(app_data / 'epi_scores_sc_comp.parquet')
+
+df_epi_comp.head()

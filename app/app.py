@@ -77,6 +77,13 @@ df_epi = df_epi.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
+### EPI scores SC Competitiva ###
+df_epi_sc_comp = pl.read_parquet(app / 'data' / 'epi_scores_sc_comp.parquet')
+df_epi_sc_comp.head()
+
+df_epi_sc_comp = df_epi_sc_comp.with_columns(
+    pl.col("epi_score_normalized").round(3)
+)
 
 ### Mercados mundiais ###
 df_markets = pl.read_parquet(app / 'data' / 'app_dataset.parquet')
@@ -155,15 +162,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(['Visão geral', 'Produtos e mercados', '
 
 
 
-
-
-
-
 #### TAB 1 - PRODUTOS ####
 with tab1:
     ### FIRST SECTION
     col1, col2 = st.columns([2, 1])
     with col1:
+        # Gerar um dicionário de cores para cada categoria de 'sc_comp'
+        sc_comp_unique = df_epi_sh6['sc_comp'].unique().to_list()
+        color_map = {row['sc_comp']: row['color'] for row in df_epi_sh6.select(['sc_comp', 'color']).unique().to_dicts()}
+
         fig = px.treemap(
             df_epi_sh6.to_pandas().head(200),
             title="Produtos (SH6):",
@@ -177,12 +184,11 @@ with tab1:
                 "sc_comp": True,
                 "categoria": False
             },
-            color_discrete_sequence=px.colors.qualitative.Plotly
+            color_discrete_map=color_map
         )
 
         fig.update_traces(marker=dict(cornerradius=5))
 
-        # Remove parent and id from hovertemplate
         fig.update_traces(
             hovertemplate="<br>".join([
                 "SH6: %{label}",
@@ -195,29 +201,22 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        df_sectors = pd.DataFrame({
-            "names": [
-            "Madeira e móveis", "Alimentos e bebidas", "Máquinas e equipamentos", 
-            "Produtos químicos", "Veículos automotores", "Têxtil e vestuário", 
-            "Metalurgia", "Plásticos e borracha", "Construção civil", 
-            "Papel e celulose", "Eletroeletrônicos", "Agropecuária"
-            ],
-            "values": [34, 16, 14, 10, 8, 12, 9, 7, 6, 11, 5, 13]
-        })
-        
-        df_sectors_sorted = df_sectors.sort_values("values", ascending=True)
-        
-        second_color = px.colors.qualitative.Plotly[0]
+        df_sector = df_epi_sc_comp.sort('epi_score_normalized', descending=True).head(10)
+        #df_sector = df_sector.reverse()
+
         fig_sector = px.bar(
-            df_sectors_sorted,
+            df_sector.to_pandas(),
             title="Setores SC Competitiva:",
-            x="values",
-            y="names",
+            x="epi_score_normalized",
+            y="sc_comp",
             orientation="h",
-            labels={"names": "","values": "Potencial de exportação"},
-            color_discrete_sequence=[second_color]
+            labels={"sc_comp": "", "epi_score_normalized": "Potencial de exportação"},
+            color="sc_comp",
+            color_discrete_map=color_map
         )
-        
+
+        fig_sector.update_layout(showlegend=False)
+
         st.plotly_chart(fig_sector, use_container_width=True)
 
     ### SECOND SECTION

@@ -116,6 +116,16 @@ df_markets = df_markets.with_columns(
     pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
 )
 
+
+
+
+
+
+
+
+
+
+
 ################## APP ########################
 #### SIDEBAR ####
 with st.sidebar:
@@ -140,7 +150,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-tab1, tab2, tab3, tab4 = st.tabs(['Visão geral', 'Produtos e mercados', 'Fornecedores', 'Metodologia'])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(['Visão geral', 'Produtos e mercados', 'Fornecedores', 'Mapa tarifário', 'Metodologia'])
 
 
 
@@ -343,7 +353,7 @@ with tab2:
             showgrid=False
             ),
             xaxis2=dict(
-            title="Montante importado",
+            title="Montante importado de Santa Catarina (US$ FOB)",
             overlaying="x",
             side="top",
             showgrid=False,
@@ -429,3 +439,5 @@ with tab2:
     )
     
     st.plotly_chart(fig_geo_prod, use_container_width=True)
+
+    st.markdown("<hr style='margin-top: -40px; margin-bottom: 10px;'>", unsafe_allow_html=True)

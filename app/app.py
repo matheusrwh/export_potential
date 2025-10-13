@@ -33,6 +33,17 @@ st.set_page_config(
     layout="wide"
 )
 
+
+def format_contabil(value):
+    if value >= 1e9:
+        return f"{value/1e9:,.1f} bi".replace(",", "X").replace(".", ",").replace("X", ".")
+    elif value >= 1e6:
+        return f"{value/1e6:,.1f} mi".replace(",", "X").replace(".", ",").replace("X", ".")
+    elif value >= 1e3:
+        return f"{value/1e3:,.1f} mil".replace(",", "X").replace(".", ",").replace("X", ".")
+    else:
+        return f"{value:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 ######## Loading the data ########
 ### Munic and VP list ###
 df_munic_vp = pl.read_excel(references / 'munic_vp.xlsx')
@@ -66,6 +77,7 @@ df_epi = df_epi.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
+
 ### Mercados mundiais ###
 df_markets = pl.read_parquet(app / 'data' / 'app_dataset.parquet')
 
@@ -88,8 +100,21 @@ df_markets = df_markets.with_columns(
     (pl.col('sh6') + " - " + pl.col('product_description_br')).alias('sh6_product')
 )
 
+df_markets = df_markets.with_columns(
+    pl.col("value").map_elements(format_contabil).alias("value_contabil"),
+    pl.col("dist").map_elements(format_contabil).alias("dist")
+)
 
 
+def format_decimal(value, decimals=1):
+    return f"{value:.{decimals}f}".replace(".", ",")
+
+df_markets = df_markets.with_columns(
+    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
+    pl.col('market_share').map_elements(lambda x: format_decimal(x, 1)).alias('market_share'),
+    pl.col('share_sc').map_elements(lambda x: format_decimal(x, 1)).alias('share_sc'),
+    pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
+)
 
 ################## APP ########################
 #### SIDEBAR ####
@@ -272,7 +297,7 @@ with tab2:
     selected_sh6 = st.selectbox("**Selecione o código SH6:**", sh6_options, key="sh6_selectbox_tab2")
 
     ### Columns for layout
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([0.8, 1])
     
     with col1:
         df_selected = df_epi.filter(pl.col("sh6_product") == selected_sh6).sort("epi_score_normalized", descending=True)
@@ -338,70 +363,69 @@ with tab2:
 
         st.plotly_chart(fig, use_container_width=True)
     with col2:
-        st.markdown("<div style='margin-top: 150px;'></div>", unsafe_allow_html=True)  # Adiciona espaço acima do mapa
-        fig_geo_prod = px.scatter_geo(
-            df_selected_pd_map,
-            locations="importer",
-            locationmode="ISO-3",
-            hover_name="importer",
-            color='categoria',
-            size="epi_score_normalized",
-            projection="natural earth",
-            color_discrete_sequence=px.colors.qualitative.Plotly,
-            size_max=50,
-            hover_data={
-                "importer_name": True,
-                "epi_score_normalized": True,
-                "importer": False
-            }
-        )
-
-        fig_geo_prod.update_geos(
-            showcountries=True,
-            countrycolor="white",  
-            showland=True,
-            landcolor="#363d49",   
-            bgcolor="#0e1117",     
-            showcoastlines=True,
-            coastlinecolor="white", 
-            countrywidth=0.4,      
-            coastlinewidth=0.4
-        )
-
-        fig_geo_prod.update_traces(
-            hovertemplate="<br>".join([
-            "País: %{customdata[0]}",
-            "Índice PE: %{customdata[1]}"
-            ])
-        )
-
-        fig_geo_prod.update_layout(
-            width=1200,
-            height=600,
-            legend=dict(
-            title=None,
-            orientation="h",
-            x=0.25,
-            y=0,
-            bgcolor='rgba(0,0,0,0)'
-            )
-        )
-        
-        st.plotly_chart(fig_geo_prod, use_container_width=True)
-
-    col3, col4 = st.columns([2, 1])
-    
-    with col3:
+        st.markdown("<div style='margin-top: 220px;'></div>", unsafe_allow_html=True)
+        st.markdown("**Mercado mundial do produto:**")
         st.dataframe(
             df_selected_markets.select([
                 pl.col('importer_name').alias("País"),
-                pl.col('value').alias("Montante US$"),
+                pl.col('value_contabil').alias("Montante US$"),
                 pl.col('market_share').alias("Market Share (%)"),
-                pl.col('cagr_5y').alias("CAGR 5 anos (%)"),
+                pl.col('cagr_5y_adj').alias("CAGR 5 anos (%)"),
                 pl.col('share_brazil').alias("Share Brasil (%)"),
                 pl.col('share_sc').alias("Share SC (%)"),
                 pl.col('dist').alias("Distância (km)")
             ])
         )
+    #################### MAPA ####################
+    st.markdown("<div style='margin-top: 5px; margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+    fig_geo_prod = px.scatter_geo(
+        df_selected_pd_map,
+        locations="importer",
+        locationmode="ISO-3",
+        hover_name="importer",
+        color='categoria',
+        size="epi_score_normalized",
+        projection="natural earth",
+        color_discrete_sequence=px.colors.qualitative.Plotly,
+        size_max=50,
+        hover_data={
+            "importer_name": True,
+            "epi_score_normalized": True,
+            "importer": False
+        }
+    )
 
-    st.markdown("<hr style='margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+    fig_geo_prod.update_geos(
+        showcountries=True,
+        countrycolor="white",  
+        showland=True,
+        landcolor="#363d49",   
+        bgcolor="#0e1117",     
+        showcoastlines=True,
+        coastlinecolor="white", 
+        countrywidth=0.4,      
+        coastlinewidth=0.4
+    )
+
+    fig_geo_prod.update_traces(
+        hovertemplate="<br>".join([
+        "País: %{customdata[0]}",
+        "Índice PE: %{customdata[1]}"
+        ])
+    )
+
+    fig_geo_prod.update_layout(
+        width=1200,
+        height=600,
+        title=f"Distribuição geográfica do Índice PE:",
+        legend=dict(
+        title=None,
+        orientation="h",
+        x=0.33,
+        y=0,
+        bgcolor='rgba(0,0,0,0)'
+        ),
+        margin=dict(t=40)  # Reduce top margin
+    )
+    
+    st.plotly_chart(fig_geo_prod, use_container_width=True)

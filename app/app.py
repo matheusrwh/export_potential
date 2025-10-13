@@ -169,11 +169,12 @@ with tab1:
             title="Produtos (SH6):",
             path=["sh6"],
             values="epi_score_normalized",
-            color="categoria",
+            color="sc_comp",
             hover_data={
                 "product_description_br": True,
                 "sh6": True,
                 "epi_score_normalized": True,
+                "sc_comp": True,
                 "categoria": False
             },
             color_discrete_sequence=px.colors.qualitative.Plotly
@@ -186,11 +187,13 @@ with tab1:
             hovertemplate="<br>".join([
                 "SH6: %{label}",
                 "Descrição: %{customdata[0]}",
-                "Índice PE: %{customdata[2]}"
+                "Índice PE: %{customdata[2]}",
+                "SC Competitiva: %{customdata[3]}"
             ])
         )
+
         st.plotly_chart(fig, use_container_width=True)
-        
+
     with col2:
         df_sectors = pd.DataFrame({
             "names": [
@@ -216,9 +219,7 @@ with tab1:
         )
         
         st.plotly_chart(fig_sector, use_container_width=True)
-    
-    #st.markdown("<hr style='margin-top: 0px; margin-bottom: 10px;'>", unsafe_allow_html=True)
-    
+
     ### SECOND SECTION
     col3, col4 = st.columns([2, 0.675])
 
@@ -373,7 +374,7 @@ with tab2:
 
         st.plotly_chart(fig, use_container_width=True)
     with col2:
-        st.markdown("<div style='margin-top: 220px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 200px;'></div>", unsafe_allow_html=True)
         st.markdown("**Mercado mundial do produto:**")
         st.dataframe(
             df_selected_markets.select([
@@ -386,6 +387,13 @@ with tab2:
                 pl.col('dist').alias("Distância (km)")
             ])
         )
+
+        st.markdown(
+            "<div style='margin-top: -15px;'></div>"
+            "<span style='font-size:14px;'>Nota: CAGR 5 anos (%) refere-se ao crescimento anual composto das importações do país no produto nos últimos 5 anos.</span>",
+            unsafe_allow_html=True
+        )
+    
     #################### MAPA ####################
     st.markdown("<div style='margin-top: 5px; margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     fig_geo_prod = px.scatter_geo(

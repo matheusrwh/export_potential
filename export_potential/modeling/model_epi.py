@@ -19,7 +19,6 @@ df_ease.head()
 df_demand.head()
 df_supply.head()
 df_bilateral_sh6.head()
-df_countries.head()
 
 df_epi = df_supply.join(
     df_demand.select(['importer', 'sh6', 'projected_import_value']),
@@ -110,7 +109,18 @@ df_epi = df_epi.with_columns([
 
 df_epi = df_epi.rename({'NO_SH6_POR': 'product_description_br'})
 
-df_epi = df_epi.select(['exporter', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br',
+df_sc_comp = pl.read_excel(references / 'sh6_mundo_comp.xlsx')
+
+df_sc_comp.head()
+
+df_epi = df_epi.join(
+    df_sc_comp,
+    left_on='sh6',
+    right_on='sh6',
+    how='left'
+)
+
+df_epi = df_epi.select(['exporter', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br', 'sc_comp',
                         'bilateral_exports_sc_sh6', 'proj_exports_sc_2027', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
 
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

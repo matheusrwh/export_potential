@@ -112,6 +112,12 @@ df_markets = df_markets.with_columns(
     pl.col("dist").map_elements(format_contabil).alias("dist")
 )
 
+@st.cache_data
+def load_competitors():
+    return pl.read_parquet(app / 'data' / 'df_competitors.parquet')
+
+df_competitors = load_competitors()
+
 
 def format_decimal(value, decimals=1):
     return f"{value:.{decimals}f}".replace(".", ",")
@@ -123,9 +129,11 @@ df_markets = df_markets.with_columns(
     pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
 )
 
-
-
-
+df_competitors = df_competitors.with_columns(
+    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
+    pl.col('value').map_elements(format_contabil).alias('value_contabil'),
+    pl.col('importer_sh6_share').map_elements(lambda x: format_decimal(x, 2)).alias('importer_sh6_share')
+)
 
 
 
@@ -198,7 +206,7 @@ with tab1:
             ])
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with col2:
         df_sector = df_epi_sc_comp.sort('epi_score_normalized', descending=True).head(10)
@@ -217,7 +225,7 @@ with tab1:
 
         fig_sector.update_layout(showlegend=False)
 
-        st.plotly_chart(fig_sector, use_container_width=True)
+        st.plotly_chart(fig_sector, width='stretch')
 
     ### SECOND SECTION
     col3, col4 = st.columns([2, 0.675])
@@ -267,13 +275,13 @@ with tab1:
             legend=dict(
             title="Categoria",
             orientation="v",
-            x=0,
+            x=-0.02,
             y=1,
             bgcolor='rgba(0,0,0,0)'
             )
         )
         
-        st.plotly_chart(fig_geo, use_container_width=True)
+        st.plotly_chart(fig_geo, width='stretch')
 
     with col4:
         st.markdown("<div style='margin-top: 110px;'></div>", unsafe_allow_html=True)
@@ -283,7 +291,7 @@ with tab1:
                 pl.col('epi_score_normalized').alias('Índice PE'),
                 pl.col('categoria').alias('Categoria')
             ]).to_pandas().head(50),
-            use_container_width=True,
+            width='stretch',
             hide_index=True
         )
     
@@ -319,14 +327,13 @@ with tab2:
         fig = go.Figure()
 
         # Bar for EPI index (primary x-axis)
-        second_color = px.colors.qualitative.Plotly[0]
         fig.add_trace(
             go.Bar(
             x=df_selected_pd["epi_score_normalized"],
             y=df_selected_pd["importer_name"],
             orientation="h",
             name="Índice PE",
-            marker_color=second_color,
+            marker_color=px.colors.qualitative.Plotly[0],
             hovertemplate="País: %{y}<br>Índice PE: %{x}<extra></extra>",
             xaxis="x",
             )
@@ -371,25 +378,35 @@ with tab2:
             margin=dict(l=0, r=0, t=140, b=0)  # Increased top margin to 140 for more spacing below the title
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     with col2:
-        st.markdown("<div style='margin-top: 200px;'></div>", unsafe_allow_html=True)
-        st.markdown("**Mercado mundial do produto:**")
+        st.markdown("<div style='margin-top: 180px;'></div>", unsafe_allow_html=True)
+        total_imports = df_selected_markets['value'].sum()
+        st.markdown(f"**Mercado mundial do produto (2023):**<br><span style='font-size:24px; font-weight:bold;'>US$ {format_contabil(total_imports)}</span>", unsafe_allow_html=True)
+        
+        # Adiciona coluna de posição relativa (ranking)
+        df_selected_markets = df_selected_markets.with_columns(
+            (pl.arange(1, df_selected_markets.height + 1)).alias("Posição")
+        )
+
         st.dataframe(
             df_selected_markets.select([
-                pl.col('importer_name').alias("País"),
-                pl.col('value_contabil').alias("Montante US$"),
-                pl.col('market_share').alias("Market Share (%)"),
-                pl.col('cagr_5y_adj').alias("CAGR 5 anos (%)"),
-                pl.col('share_brazil').alias("Share Brasil (%)"),
-                pl.col('share_sc').alias("Share SC (%)"),
-                pl.col('dist').alias("Distância (km)")
-            ])
+            pl.col('Posição'),
+            pl.col('importer_name').alias("País"),
+            pl.col('value_contabil').alias("Montante US$"),
+            pl.col('market_share').alias("Market Share (%)"),
+            pl.col('cagr_5y_adj').alias("CAGR 5 anos (%)"),
+            pl.col('share_brazil').alias("Share Brasil (%)"),
+            pl.col('share_sc').alias("Share SC (%)"),
+            pl.col('dist').alias("Distância (km)")
+            ]),
+            width='stretch',
+            hide_index=True
         )
 
         st.markdown(
             "<div style='margin-top: -15px;'></div>"
-            "<span style='font-size:14px;'>Nota: CAGR 5 anos (%) refere-se ao crescimento anual composto das importações do país no produto nos últimos 5 anos.</span>",
+            "<span style='font-size:14px;'><b>Nota:</b> CAGR 5 anos (%) refere-se ao crescimento anual composto das importações nos últimos 5 anos.</span>",
             unsafe_allow_html=True
         )
     
@@ -445,6 +462,94 @@ with tab2:
         margin=dict(t=40)  # Reduce top margin
     )
     
-    st.plotly_chart(fig_geo_prod, use_container_width=True)
+    st.plotly_chart(fig_geo_prod, width='stretch')
 
     st.markdown("<hr style='margin-top: -40px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+
+
+
+
+
+
+
+    
+#### TAB 3 - FORNECEDORES ####
+with tab3:
+    col1, col2 = st.columns([0.8, 1])
+    
+    countries = df_competitors["importer_name"].unique().to_list()
+    products = df_competitors['sh6_product'].unique().to_list()
+
+    with col1:
+        sel_country = st.selectbox("**Selecione o país:**",
+                     options=sorted([opt for opt in countries if opt is not None]), key="country_selectbox_tab3")
+    with col2:
+        sel_product = st.selectbox("**Selecione o produto (SH6):**",
+                     options=sorted([opt for opt in products if opt is not None]), key="product_selectbox_tab3")
+        
+    df_competitors_filtered = df_competitors.filter(
+        (pl.col("importer_name") == sel_country) & (pl.col("sh6_product") == sel_product)).sort("value", descending=True)
+
+    total_imports = df_competitors_filtered['value'].sum()
+
+    ### FIRST SECTION
+    col3, col4 = st.columns([2, 1.25])
+    with col3:
+        # Gerar um dicionário de cores para cada categoria de 'sc_comp'
+        sc_comp_unique = df_epi_sh6['sc_comp'].unique().to_list()
+        color_map = {row['sc_comp']: row['color'] for row in df_epi_sh6.select(['sc_comp', 'color']).unique().to_dicts()}
+
+        df_treemap = df_competitors_filtered.to_pandas().head(200)
+        df_treemap = df_treemap[df_treemap["exporter_name"].notna() & df_treemap["sh6"].notna()]
+
+        fig = px.treemap(
+            df_treemap,
+            title="Países fornecedores (2023):",
+            path=["exporter_name"],
+            values="value",
+            color="exporter_name",
+            hover_data={
+                "product_description_br": True,
+                "sh6": True,
+                "value_contabil": True
+            },
+            color_discrete_map=color_map
+        )
+
+        fig.update_traces(marker=dict(cornerradius=5))
+
+        fig.update_traces(
+            hovertemplate="<br>".join([
+                "SH6: %{label}",
+                "Descrição: %{customdata[0]}",
+                'Valor importado: US$ %{customdata[2]}',
+            ])
+        )
+
+        st.plotly_chart(fig, width='stretch')
+    
+    with col4:
+        st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"**Total importado (2023):**<br><span style='font-size:24px; font-weight:bold;'>US$ {format_contabil(total_imports)}</span>", unsafe_allow_html=True)
+        
+        # Adiciona coluna de posição relativa (ranking)
+        df_competitors_filtered = df_competitors_filtered.with_columns(
+            (pl.arange(1, df_competitors_filtered.height + 1)).alias("Posição")
+        )
+
+        st.dataframe(
+            df_competitors_filtered.select([
+            pl.col('Posição'),
+            pl.col('exporter_name').alias('País fornecedor'),
+            pl.col('value_contabil').alias('Montante US$'),
+            pl.col('importer_sh6_share').alias('Share (%)'),
+            pl.col('cagr_5y_adj').alias('CAGR 5 anos (%)')
+            ]).to_pandas().head(50),
+            width='stretch',
+            hide_index=True
+        )
+        st.markdown(
+            "<div style='margin-top: -15px;'></div>"
+            "<span style='font-size:14px;'><b>Nota:</b> CAGR 5 anos (%) refere-se ao crescimento anual composto das importações nos últimos 5 anos.</span>",
+            unsafe_allow_html=True
+        )

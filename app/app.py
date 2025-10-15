@@ -195,7 +195,7 @@ with tab1:
             ])
         )
 
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, config={"responsive": True})
 
     with col2:
         df_sector = df_epi_sc_comp.sort('epi_score_normalized', descending=True).head(10)

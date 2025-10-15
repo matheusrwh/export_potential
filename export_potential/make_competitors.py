@@ -181,4 +181,25 @@ df_all = df_all.select([
     'year', 'exporter', 'exporter_name', 'importer', 'importer_name',
     'sh6', 'product_description_br', 'sh6_product', 'value', 'cagr_5y', 'importer_sh6_share'])
 
+def format_contabil(value):
+    if value >= 1e9:
+        return f"{value/1e9:,.1f} bi".replace(",", "X").replace(".", ",").replace("X", ".")
+    elif value >= 1e6:
+        return f"{value/1e6:,.1f} mi".replace(",", "X").replace(".", ",").replace("X", ".")
+    elif value >= 1e3:
+        return f"{value/1e3:,.1f} mil".replace(",", "X").replace(".", ",").replace("X", ".")
+    else:
+        return f"{value:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def format_decimal(value, decimals=1):
+    return f"{value:.{decimals}f}".replace(".", ",")
+
+df_all = df_all.with_columns(
+    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
+    pl.col('value').map_elements(format_contabil).alias('value_contabil'),
+    pl.col('importer_sh6_share').map_elements(lambda x: format_decimal(x, 2)).alias('importer_sh6_share')
+)
+
+df_all.head()
+
 df_all.write_parquet(app_data / 'df_competitors.parquet', compression='snappy')

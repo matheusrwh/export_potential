@@ -89,6 +89,7 @@ df_epi_sc_comp = df_epi_sc_comp.with_columns(
 df_markets = pl.read_parquet(app / 'data' / 'app_dataset.parquet')
 
 df_markets.head()
+#df_markets.shape
 
 df_markets = df_markets.select([
     pl.col('importer'),
@@ -112,7 +113,7 @@ df_markets = df_markets.with_columns(
     pl.col("dist").map_elements(format_contabil).alias("dist")
 )
 
-@st.cache_data
+@st.cache_resource(show_spinner=False)
 def load_competitors():
     return pl.read_parquet(app / 'data' / 'df_competitors.parquet')
 
@@ -128,18 +129,6 @@ df_markets = df_markets.with_columns(
     pl.col('share_sc').map_elements(lambda x: format_decimal(x, 1)).alias('share_sc'),
     pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
 )
-
-df_competitors = df_competitors.with_columns(
-    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
-    pl.col('value').map_elements(format_contabil).alias('value_contabil'),
-    pl.col('importer_sh6_share').map_elements(lambda x: format_decimal(x, 2)).alias('importer_sh6_share')
-)
-
-
-
-
-
-
 
 ################## APP ########################
 #### SIDEBAR ####
@@ -258,8 +247,8 @@ with tab1:
             bgcolor="#0e1117",     
             showcoastlines=True,
             coastlinecolor="white", 
-            countrywidth=0.4,      
-            coastlinewidth=0.4
+            countrywidth=0.1,      
+            coastlinewidth=0.1
         )
 
         fig_geo.update_traces(
@@ -295,9 +284,8 @@ with tab1:
             hide_index=True
         )
     
-    st.markdown("<hr style='margin-top: -35px; margin-bottom: 10px;'>", unsafe_allow_html=True)
-
-
+    st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)
 
 
 
@@ -421,7 +409,7 @@ with tab2:
         size="epi_score_normalized",
         projection="natural earth",
         color_discrete_sequence=px.colors.qualitative.Plotly,
-        size_max=50,
+        size_max=65,
         hover_data={
             "importer_name": True,
             "epi_score_normalized": True,
@@ -437,8 +425,8 @@ with tab2:
         bgcolor="#0e1117",     
         showcoastlines=True,
         coastlinecolor="white", 
-        countrywidth=0.4,      
-        coastlinewidth=0.4
+        countrywidth=0.1,      
+        coastlinewidth=0.1
     )
 
     fig_geo_prod.update_traces(
@@ -463,8 +451,8 @@ with tab2:
     )
     
     st.plotly_chart(fig_geo_prod, width='stretch')
-
-    st.markdown("<hr style='margin-top: -40px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)
 
 
 
@@ -475,61 +463,151 @@ with tab2:
     
 #### TAB 3 - FORNECEDORES ####
 with tab3:
-    col1, col2 = st.columns([0.8, 1])
+    # --- Cache unique values ---
+    @st.cache_data(show_spinner=False)
+    def get_unique_options(df: pl.DataFrame):
+        """
+        Return sorted unique lists for importer_name and sh6_product.
+        This will only recompute when df_competitors changes.
+        """
+        countries = (
+            df.select(pl.col("importer_name").drop_nulls().unique().sort())
+            .to_series().to_list()
+        )
+        products = (
+            df.select(pl.col("sh6_product").drop_nulls().unique().sort())
+            .to_series().to_list()
+        )
+        return countries, products
     
-    countries = df_competitors["importer_name"].unique().to_list()
-    products = df_competitors['sh6_product'].unique().to_list()
+
+    countries, products = get_unique_options(df_competitors)
+    col1, col2 = st.columns([0.8, 1])
 
     with col1:
-        sel_country = st.selectbox("**Selecione o país:**",
-                     options=sorted([opt for opt in countries if opt is not None]), key="country_selectbox_tab3")
+        sel_country = st.selectbox(
+            "*Selecione o país:*",
+            options=countries,
+            key="country_selectbox_tab3"
+        )
+
     with col2:
-        sel_product = st.selectbox("**Selecione o produto (SH6):**",
-                     options=sorted([opt for opt in products if opt is not None]), key="product_selectbox_tab3")
-        
-    df_competitors_filtered = df_competitors.filter(
-        (pl.col("importer_name") == sel_country) & (pl.col("sh6_product") == sel_product)).sort("value", descending=True)
+        sel_product = st.selectbox(
+            "*Selecione o produto (SH6):*",
+            options=products,
+            key="product_selectbox_tab3"
+        )
 
-    total_imports = df_competitors_filtered['value'].sum()
+    df_competitors_filtered = (
+        df_competitors
+        .filter(
+            (pl.col("importer_name") == sel_country) &
+            (pl.col("sh6_product") == sel_product)
+        )
+        .sort("value", descending=True)
+    )
 
-    ### FIRST SECTION
+    total_imports = df_competitors_filtered.select(pl.col("value").sum()).item()
+
+    # ==== FIRST SECTION (fast + categorical-proof via graph_objects) ====
+    import plotly.graph_objects as go
+    from itertools import cycle
+    import polars as pl
+
     col3, col4 = st.columns([2, 1.25])
+
     with col3:
-        # Gerar um dicionário de cores para cada categoria de 'sc_comp'
-        sc_comp_unique = df_epi_sh6['sc_comp'].unique().to_list()
-        color_map = {row['sc_comp']: row['color'] for row in df_epi_sh6.select(['sc_comp', 'color']).unique().to_dicts()}
-
-        df_treemap = df_competitors_filtered.to_pandas().head(200)
-        df_treemap = df_treemap[df_treemap["exporter_name"].notna() & df_treemap["sh6"].notna()]
-
-        fig = px.treemap(
-            df_treemap,
-            title="Países fornecedores (2023):",
-            path=["exporter_name"],
-            values="value",
-            color="exporter_name",
-            hover_data={
-                "product_description_br": True,
-                "sh6": True,
-                "value_contabil": True
-            },
-            color_discrete_map=color_map
-        )
-
-        fig.update_traces(marker=dict(cornerradius=5))
-
-        fig.update_traces(
-            hovertemplate="<br>".join([
-                "SH6: %{label}",
-                "Descrição: %{customdata[0]}",
-                'Valor importado: US$ %{customdata[2]}',
+        df_treemap_pl = (
+            df_competitors_filtered
+            .select([
+                "exporter_name", "sh6", "value",
+                "product_description_br", "value_contabil"
             ])
+            .filter(pl.col("exporter_name").is_not_null() & pl.col("sh6").is_not_null())
+            .head(200)
         )
 
-        st.plotly_chart(fig, width='stretch')
+        if df_treemap_pl.height == 0:
+            st.info("Sem dados para este país/produto.")
+        else:
+            # Optional: join your preferred colors per exporter (fallback palette if missing)
+            # df_epi_sh6 must have ['exporter_name','color'] if you want custom colors
+            has_colors = "df_epi_sh6" in globals() and isinstance(df_epi_sh6, pl.DataFrame) \
+                        and set(["exporter_name","color"]).issubset(df_epi_sh6.columns)
+
+            if has_colors:
+                df_plot = (
+                    df_treemap_pl.join(
+                        df_epi_sh6.select(["exporter_name","color"]).unique(),
+                        on="exporter_name",
+                        how="left"
+                    )
+                )
+            else:
+                df_plot = df_treemap_pl
+
+            # Convert columns to Python lists (no pandas/categoricals involved)
+            exporters  = df_plot.get_column("exporter_name").to_list()
+            sh6_arr    = df_plot.get_column("sh6").to_list()
+            values     = df_plot.get_column("value").to_list()
+            descr      = df_plot.get_column("product_description_br").to_list()
+            v_text     = df_plot.get_column("value_contabil").to_list()
+
+            # Colors: use provided colors if present; otherwise generate a palette
+            provided_colors = df_plot.get_column("color").to_list() if has_colors else [None] * len(exporters)
+            if any(c is not None for c in provided_colors):
+                node_colors = [c if c is not None else "#8FA5FF" for c in provided_colors]
+            else:
+                # deterministic palette by exporter name
+                palette = (
+                    ['#23CCA1', '#E24B5E', '#EAD97F', '#4FD1C5', '#8FA5FF',
+                    '#B388EB', '#FFA07A', '#7FB77E', '#F6C85F', '#9FD3C7']
+                )
+                cyc = cycle(palette)
+                # unique exporters -> color
+                uniq = {}
+                node_colors = []
+                for name in exporters:
+                    if name not in uniq:
+                        uniq[name] = next(cyc)
+                    node_colors.append(uniq[name])
+
+            # Customdata for hover: [descr, sh6, value_contabil]
+            import numpy as np
+            customdata = np.column_stack([descr, sh6_arr, v_text]) if exporters else np.empty((0,3))
+
+            fig = go.Figure(
+                go.Treemap(
+                    labels=exporters,
+                    parents=["Países fornecedores"] * len(exporters),  # single-level treemap
+                    values=values,
+                    branchvalues="total",
+                    marker=dict(
+                        colors=node_colors,
+                        line=dict(width=0.5, color="rgba(255,255,255,0.15)"),
+                    ),
+                    tiling=dict(pad=2),
+                    textinfo="label+value",
+                    texttemplate="%{label}<br>%{value:.2s}",
+                    hovertemplate="<br>".join([
+                        "Exportador: %{label}",
+                        "SH6: %{customdata[1]}",
+                        "Descrição: %{customdata[0]}",
+                        "Valor importado: US$ %{customdata[2]}",
+                        "<extra></extra>"
+                    ]),
+                    customdata=customdata,
+                )
+            )
+            fig.update_layout(
+                title="Países fornecedores (2023):",
+                margin=dict(l=0, r=0, t=40, b=0),
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
     
     with col4:
-        st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
         st.markdown(f"**Total importado (2023):**<br><span style='font-size:24px; font-weight:bold;'>US$ {format_contabil(total_imports)}</span>", unsafe_allow_html=True)
         
         # Adiciona coluna de posição relativa (ranking)
@@ -553,3 +631,51 @@ with tab3:
             "<span style='font-size:14px;'><b>Nota:</b> CAGR 5 anos (%) refere-se ao crescimento anual composto das importações nos últimos 5 anos.</span>",
             unsafe_allow_html=True
         )
+
+    st.markdown("<div style='margin-top: 5px; margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+    # Mapa de distribuição das importações por país para os filtros feitos
+    fig_geo_imports = px.scatter_geo(
+        df_competitors_filtered.to_pandas(),
+        locations="exporter",
+        locationmode="ISO-3",
+        hover_name="exporter_name",
+        size="value",
+        projection="natural earth",
+        color_discrete_sequence=px.colors.qualitative.Plotly,
+        size_max=50,
+        hover_data={
+            "exporter_name": True,
+            "value_contabil": True,
+            "exporter": False
+        }
+    )
+
+    fig_geo_imports.update_geos(
+        showcountries=True,
+        countrycolor="white",
+        showland=True,
+        landcolor="#363d49",
+        bgcolor="#0e1117",
+        showcoastlines=True,
+        coastlinecolor="white",
+        countrywidth=0.1,
+        coastlinewidth=0.1
+    )
+
+    fig_geo_imports.update_traces(
+        hovertemplate="<br>".join([
+            "País fornecedor: %{customdata[0]}",
+            "Valor importado: US$ %{customdata[1]}"
+        ])
+    )
+
+    fig_geo_imports.update_layout(
+        width=1200,
+        height=600,
+        showlegend=False
+    )
+
+    st.plotly_chart(fig_geo_imports, width='stretch')
+
+    st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)

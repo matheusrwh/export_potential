@@ -243,7 +243,7 @@ with tab1:
             showcountries=True,
             countrycolor="white",  
             showland=True,
-            landcolor="#363d49",   
+            landcolor="#595959",   
             bgcolor="#0e1117",     
             showcoastlines=True,
             coastlinecolor="white", 
@@ -421,7 +421,7 @@ with tab2:
         showcountries=True,
         countrycolor="white",  
         showland=True,
-        landcolor="#363d49",   
+        landcolor="#595959",   
         bgcolor="#0e1117",     
         showcoastlines=True,
         coastlinecolor="white", 
@@ -527,6 +527,9 @@ with tab3:
             .head(200)
         )
 
+        st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
+
+
         if df_treemap_pl.height == 0:
             st.info("Sem dados para este país/produto.")
         else:
@@ -579,7 +582,7 @@ with tab3:
             fig = go.Figure(
                 go.Treemap(
                     labels=exporters,
-                    parents=["Países fornecedores"] * len(exporters),  # single-level treemap
+                    parents=[""] * len(exporters),  # remove parent label from nodes
                     values=values,
                     branchvalues="total",
                     marker=dict(
@@ -607,7 +610,7 @@ with tab3:
             st.plotly_chart(fig, use_container_width=True)
     
     with col4:
-        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 0px;'></div>", unsafe_allow_html=True)
         st.markdown(f"**Total importado (2023):**<br><span style='font-size:24px; font-weight:bold;'>US$ {format_contabil(total_imports)}</span>", unsafe_allow_html=True)
         
         # Adiciona coluna de posição relativa (ranking)
@@ -633,6 +636,7 @@ with tab3:
         )
 
     st.markdown("<div style='margin-top: 5px; margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+    
     # Mapa de distribuição das importações por país para os filtros feitos
     fig_geo_imports = px.scatter_geo(
         df_competitors_filtered.to_pandas(),
@@ -654,7 +658,7 @@ with tab3:
         showcountries=True,
         countrycolor="white",
         showland=True,
-        landcolor="#363d49",
+        landcolor="#595959",
         bgcolor="#0e1117",
         showcoastlines=True,
         coastlinecolor="white",

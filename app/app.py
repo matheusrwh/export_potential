@@ -638,6 +638,7 @@ with tab3:
     st.markdown("<div style='margin-top: 5px; margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     
     # Mapa de distribuição das importações por país para os filtros feitos
+    # Use config argument instead of deprecated keyword arguments in st.plotly_chart
     fig_geo_imports = px.scatter_geo(
         df_competitors_filtered.to_pandas(),
         locations="exporter",
@@ -679,7 +680,7 @@ with tab3:
         showlegend=False
     )
 
-    st.plotly_chart(fig_geo_imports, width='stretch')
+    st.plotly_chart(fig_geo_imports, config={"responsive": True})
 
     st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
     st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)

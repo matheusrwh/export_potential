@@ -214,7 +214,7 @@ with tab1:
 
         fig_sector.update_layout(showlegend=False)
 
-        st.plotly_chart(fig_sector, width='stretch')
+        st.plotly_chart(fig_sector, config={"responsive": True})
 
     ### SECOND SECTION
     col3, col4 = st.columns([2, 0.675])
@@ -270,7 +270,7 @@ with tab1:
             )
         )
         
-        st.plotly_chart(fig_geo, width='stretch')
+        st.plotly_chart(fig_geo, config={"responsive": True})
 
     with col4:
         st.markdown("<div style='margin-top: 110px;'></div>", unsafe_allow_html=True)
@@ -366,7 +366,7 @@ with tab2:
             margin=dict(l=0, r=0, t=140, b=0)  # Increased top margin to 140 for more spacing below the title
         )
 
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, config={"responsive": True})
     with col2:
         st.markdown("<div style='margin-top: 180px;'></div>", unsafe_allow_html=True)
         total_imports = df_selected_markets['value'].sum()
@@ -449,8 +449,9 @@ with tab2:
         ),
         margin=dict(t=40)  # Reduce top margin
     )
-    
-    st.plotly_chart(fig_geo_prod, width='stretch')
+
+    st.plotly_chart(fig_geo_prod, config={"responsive": True})
+
     st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
     st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)
 
@@ -607,7 +608,7 @@ with tab3:
                 margin=dict(l=0, r=0, t=40, b=0),
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, config={"responsive": True})
     
     with col4:
         st.markdown("<div style='margin-top: 0px;'></div>", unsafe_allow_html=True)

@@ -69,9 +69,11 @@ df_epi_countries = df_epi_countries.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
-### EPI scores ###
-df_epi = pl.read_parquet(app / 'data' / 'epi_scores.parquet')
-df_epi.head()
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_epi():
+    return pl.read_parquet(app / 'data' / 'epi_scores.parquet')
+
+df_epi = load_epi()
 
 df_epi = df_epi.with_columns(
     pl.col("epi_score_normalized").round(3)
@@ -85,8 +87,11 @@ df_epi_sc_comp = df_epi_sc_comp.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
-### Mercados mundiais ###
-df_markets = pl.read_parquet(app / 'data' / 'app_dataset.parquet')
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_markets():
+    return pl.read_parquet(app / 'data' / 'app_dataset.parquet')
+
+df_markets = load_markets()
 
 df_markets.head()
 #df_markets.shape

@@ -44,58 +44,58 @@ def format_contabil(value):
     else:
         return f"{value:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-######## Loading the data ########
-### Munic and VP list ###
-df_munic_vp = pl.read_excel(references / 'munic_vp.xlsx')
+######## Loading the data (cached) ########
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_munic_vp():
+    return pl.read_excel(references / 'munic_vp.xlsx')
 
-vp = df_munic_vp['vp'].unique().to_list()
-vp.sort()
-munic = df_munic_vp['munic'].unique().to_list()
-munic.sort()
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_epi_sh6():
+    df = pl.read_parquet(app / 'data' / 'epi_scores_sh6.parquet')
+    return df.with_columns(pl.col("epi_score_normalized").round(3))
 
-### EPI scores SH6 ###
-df_epi_sh6 = pl.read_parquet(app / 'data' / 'epi_scores_sh6.parquet')
-df_epi_sh6.head()
-
-df_epi_sh6 = df_epi_sh6.with_columns(
-    pl.col("epi_score_normalized").round(3)
-)
-
-### EPI scores countries ###
-df_epi_countries = pl.read_parquet(app / 'data' / 'epi_scores_countries.parquet')
-df_epi_countries.head()
-
-df_epi_countries = df_epi_countries.with_columns(
-    pl.col("epi_score_normalized").round(3)
-)
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_epi_countries():
+    df = pl.read_parquet(app / 'data' / 'epi_scores_countries.parquet')
+    return df.with_columns(pl.col("epi_score_normalized").round(3))
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_epi():
-    return pl.read_parquet(app / 'data' / 'epi_scores.parquet')
+    df = pl.read_parquet(app / 'data' / 'epi_scores.parquet')
+    return df.with_columns(pl.col("epi_score_normalized").round(3))
 
-df_epi = load_epi()
-
-df_epi = df_epi.with_columns(
-    pl.col("epi_score_normalized").round(3)
-)
-
-### EPI scores SC Competitiva ###
-df_epi_sc_comp = pl.read_parquet(app / 'data' / 'epi_scores_sc_comp.parquet')
-df_epi_sc_comp.head()
-
-df_epi_sc_comp = df_epi_sc_comp.with_columns(
-    pl.col("epi_score_normalized").round(3)
-)
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_epi_sc_comp():
+    df = pl.read_parquet(app / 'data' / 'epi_scores_sc_comp.parquet')
+    return df.with_columns(pl.col("epi_score_normalized").round(3))
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_markets():
     return pl.read_parquet(app / 'data' / 'app_dataset.parquet')
 
+@st.cache_resource(ttl=1800, show_spinner=False)
+def load_competitors():
+    return pl.read_parquet(app / 'data' / 'df_competitors.parquet')
+
+
+# load datasets
+df_munic_vp = load_munic_vp()
+vp = df_munic_vp['vp'].unique().to_list()
+vp.sort()
+munic = df_munic_vp['munic'].unique().to_list()
+munic.sort()
+
+df_epi_sh6 = load_epi_sh6()
+
+df_epi_countries = load_epi_countries()
+
+df_epi = load_epi()
+
+df_epi_sc_comp = load_epi_sc_comp()
+
 df_markets = load_markets()
 
-df_markets.head()
-#df_markets.shape
-
+# select / rename / format markets
 df_markets = df_markets.select([
     pl.col('importer'),
     pl.col('country_name').alias('importer_name'),
@@ -107,20 +107,12 @@ df_markets = df_markets.select([
     pl.col('share_brazil'),
     pl.col('share_sc'),
     pl.col('dist')
-])
-
-df_markets = df_markets.with_columns(
+]).with_columns(
     (pl.col('sh6') + " - " + pl.col('product_description_br')).alias('sh6_product')
-)
-
-df_markets = df_markets.with_columns(
+).with_columns(
     pl.col("value").map_elements(format_contabil).alias("value_contabil"),
     pl.col("dist").map_elements(format_contabil).alias("dist")
 )
-
-@st.cache_resource(show_spinner=False)
-def load_competitors():
-    return pl.read_parquet(app / 'data' / 'df_competitors.parquet')
 
 df_competitors = load_competitors()
 
@@ -132,7 +124,7 @@ df_markets = df_markets.with_columns(
     pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
     pl.col('market_share').map_elements(lambda x: format_decimal(x, 1)).alias('market_share'),
     pl.col('share_sc').map_elements(lambda x: format_decimal(x, 1)).alias('share_sc'),
-    pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
+    pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil')
 )
 
 ################## APP ########################

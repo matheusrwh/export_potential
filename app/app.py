@@ -4,9 +4,56 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+import tracemalloc
+import psutil
+import os
 
 from warnings import filterwarnings
 filterwarnings("ignore")
+
+# Add at the very top after imports
+if 'memory_started' not in st.session_state:
+    tracemalloc.start()
+    st.session_state.memory_started = True
+    st.session_state.snapshots = []
+
+def show_memory_usage(label=""):
+    current, peak = tracemalloc.get_traced_memory()
+    process = psutil.Process(os.getpid())
+    
+    snapshot = {
+        'label': label,
+        'current_mb': current / 1024 / 1024,
+        'peak_mb': peak / 1024 / 1024,
+        'rss_mb': process.memory_info().rss / 1024 / 1024
+    }
+    
+    st.session_state.snapshots.append(snapshot)
+    
+    st.sidebar.markdown(f"**{label}**")
+    st.sidebar.text(f"Current: {snapshot['current_mb']:.2f} MB")
+    st.sidebar.text(f"Peak: {snapshot['peak_mb']:.2f} MB")
+    st.sidebar.text(f"Process: {snapshot['rss_mb']:.2f} MB")
+    st.sidebar.markdown("---")
+if 'last_memory' not in st.session_state:
+    st.session_state.last_memory = None
+
+def show_memory_delta(label=""):
+    process = psutil.Process(os.getpid())
+    current_mb = process.memory_info().rss / 1024 / 1024
+    
+    if st.session_state.last_memory is None:
+        delta_mb = 0
+        st.session_state.last_memory = current_mb
+    else:
+        delta_mb = current_mb - st.session_state.last_memory
+        st.session_state.last_memory = current_mb
+    
+    delta_color = "🔴" if abs(delta_mb) > 50 else "🟡" if abs(delta_mb) > 10 else "🟢"
+    
+    st.sidebar.markdown(f"**{label}**")
+    st.sidebar.text(f"Memory: {current_mb:.2f} MB ({delta_color} {delta_mb:+.2f} MB)")
+    st.sidebar.markdown("---")
 
 ######## Setting the directories ########
 def get_project_root():
@@ -33,6 +80,7 @@ st.set_page_config(
     layout="wide"
 )
 
+### FUNÇÔES
 
 def format_contabil(value):
     if value >= 1e9:
@@ -44,96 +92,61 @@ def format_contabil(value):
     else:
         return f"{value:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def format_decimal(value, decimals=1):
+    return f"{value:.{decimals}f}".replace(".", ",")
+
+
 ######## Loading the data ########
 ### Munic and VP list ###
 df_munic_vp = pl.read_excel(references / 'munic_vp.xlsx')
 
 vp = df_munic_vp['vp'].unique().to_list()
-vp.sort()
 munic = df_munic_vp['munic'].unique().to_list()
-munic.sort()
 
 ### EPI scores SH6 ###
-df_epi_sh6 = pl.read_parquet(app / 'data' / 'epi_scores_sh6.parquet')
-df_epi_sh6.head()
+@st.cache_resource(ttl=1800, show_spinner=False)
+def load_epi_scores_sh6():
+    return pl.read_parquet(app / 'data' / 'epi_scores_sh6.parquet')
+df_epi_sh6 = load_epi_scores_sh6()
 
 df_epi_sh6 = df_epi_sh6.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
-
-### EPI scores countries ###
-df_epi_countries = pl.read_parquet(app / 'data' / 'epi_scores_countries.parquet')
-df_epi_countries.head()
+@st.cache_resource(ttl=1800, show_spinner=False)
+def load_epi_countries():
+    return pl.read_parquet(app / 'data' / 'epi_scores_countries.parquet')
+df_epi_countries = load_epi_countries()
 
 df_epi_countries = df_epi_countries.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
+### EPI scores ###
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def load_epi():
-    return pl.read_parquet(app / 'data' / 'epi_scores.parquet')
-
-df_epi = load_epi()
-
-df_epi = df_epi.with_columns(
-    pl.col("epi_score_normalized").round(3)
-)
+@st.cache_resource(ttl=1800, show_spinner=False)
+def load_epi_scores():
+    return pl.read_parquet(app / 'data' / 'epi_scores_processed.parquet')
+df_epi = load_epi_scores()
 
 ### EPI scores SC Competitiva ###
-df_epi_sc_comp = pl.read_parquet(app / 'data' / 'epi_scores_sc_comp.parquet')
-df_epi_sc_comp.head()
+@st.cache_resource(ttl=1800, show_spinner=False)
+def load_epi_scores_sc_comp():
+    return pl.read_parquet(app / 'data' / 'epi_scores_sc_comp.parquet')
+df_epi_sc_comp = load_epi_scores_sc_comp()
 
 df_epi_sc_comp = df_epi_sc_comp.with_columns(
     pl.col("epi_score_normalized").round(3)
 )
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_resource(ttl=1800, show_spinner=False)
 def load_markets():
-    return pl.read_parquet(app / 'data' / 'app_dataset.parquet')
-
+    return pl.read_parquet(app / 'data' / 'app_dataset_processed.parquet')
 df_markets = load_markets()
 
-df_markets.head()
-#df_markets.shape
-
-df_markets = df_markets.select([
-    pl.col('importer'),
-    pl.col('country_name').alias('importer_name'),
-    pl.col('sh6'),
-    pl.col('description').alias('product_description_br'),
-    pl.col('value'),
-    pl.col('market_share'),
-    pl.col('cagr_5y'),
-    pl.col('share_brazil'),
-    pl.col('share_sc'),
-    pl.col('dist')
-])
-
-df_markets = df_markets.with_columns(
-    (pl.col('sh6') + " - " + pl.col('product_description_br')).alias('sh6_product')
-)
-
-df_markets = df_markets.with_columns(
-    pl.col("value").map_elements(format_contabil).alias("value_contabil"),
-    pl.col("dist").map_elements(format_contabil).alias("dist")
-)
-
-@st.cache_resource(ttl=1800, show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_competitors():
     return pl.read_parquet(app / 'data' / 'df_competitors.parquet')
 
 df_competitors = load_competitors()
-
-
-def format_decimal(value, decimals=1):
-    return f"{value:.{decimals}f}".replace(".", ",")
-
-df_markets = df_markets.with_columns(
-    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
-    pl.col('market_share').map_elements(lambda x: format_decimal(x, 1)).alias('market_share'),
-    pl.col('share_sc').map_elements(lambda x: format_decimal(x, 1)).alias('share_sc'),
-    pl.col('share_brazil').map_elements(lambda x: format_decimal(x, 1)).alias('share_brazil'),
-)
 
 ################## APP ########################
 #### SIDEBAR ####
@@ -149,6 +162,12 @@ with st.sidebar:
     st.selectbox("Selecione o município:", options=["Todos"] + munic)
     st.image(app / "logo_dark.png")
     st.markdown("</div>", unsafe_allow_html=True)
+
+    import psutil
+    import os
+    process = psutil.Process(os.getpid())
+    memory_mb = process.memory_info().rss / 1024 / 1024
+    st.sidebar.metric("Memory Usage", f"{memory_mb:.2f} MB")
 
 st.title("Potencial de exportações")
 
@@ -291,7 +310,6 @@ with tab1:
     
     st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
     st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)
-
 
 
 
@@ -690,3 +708,235 @@ with tab3:
 
     st.markdown("<hr style='margin-top: -50px; margin-bottom: 0;'>", unsafe_allow_html=True)
     st.markdown("<div style='margin-top: -55px;'></div><span style='font-size:14px;'><b>Fonte:</b> CEPII (2023) e Observatório FIESC (2025).</span>", unsafe_allow_html=True)
+
+    with tab4:
+        from typing import Dict, List, Tuple
+
+        #ARQ          = "df_tariff_brazil.parquet"   # caminho do .parquet
+        VAL_COL      = "Tariff_Final"
+        REPORTER_COL = "Reporter Name"
+        PRODUCT_COL  = "Product Name"
+        YEAR_COL     = "Tariff_Year"
+
+        # Nomes para o Plotly
+        NAME_FIX: Dict[str, str] = {
+            "United States of America": "United States",
+            "Russian Federation": "Russia",
+            "Viet Nam": "Vietnam",
+            "Korea, Republic of": "South Korea",
+            "Iran, Islamic Republic of": "Iran",
+            "Czech Republic": "Czechia",
+            "Türkiye": "Turkey",
+            "Syrian Arab Republic": "Syria",
+            "Lao People's Democratic Republic": "Laos",
+            "Venezuela (Bolivarian Republic of)": "Venezuela",
+            "Bolivia (Plurinational State of)": "Bolivia",
+            "Tanzania, United Republic of": "Tanzania",
+            "Congo, Democratic Republic of the": "Democratic Republic of the Congo",
+            "Congo": "Republic of the Congo",
+            "Moldova, Republic of": "Moldova",
+            "Brunei Darussalam": "Brunei",
+            "Taiwan, Province of China": "Taiwan",
+            "Hong Kong, China": "Hong Kong",
+            "Palestine, State of": "Palestine",
+            "Côte d'Ivoire": "Ivory Coast",
+        }
+
+        def validar_colunas(df: pl.DataFrame, cols: List[str]) -> None:
+            faltantes = [c for c in cols if c not in df.columns]
+            if faltantes:
+                raise KeyError(f"As colunas obrigatórias estão faltando no arquivo: {faltantes}")
+
+        @st.cache_data(show_spinner=True)
+        def carregar_filtrar_selecionar() -> pd.DataFrame:
+            """Lê parquet e pega o ANO MAIS RECENTE por (Reporter, Product)."""
+            df = pl.read_parquet(app / 'data' / 'df_tariff_brazil.parquet')
+
+            validar_colunas(df, [REPORTER_COL, PRODUCT_COL, YEAR_COL, VAL_COL])
+
+            # Desconsiderar o Brasil como reporter
+            df = df.filter(pl.col(REPORTER_COL) != "Brazil")
+
+            # ordenar por (produto, país, ano desc) e manter a primeira ocorrência
+            df = (
+                df.sort(by=[PRODUCT_COL, REPORTER_COL, YEAR_COL], descending=[False, False, True])
+                .unique(subset=[REPORTER_COL, PRODUCT_COL], keep="first")
+                .select([REPORTER_COL, PRODUCT_COL, YEAR_COL, VAL_COL])
+            )
+
+            if df.is_empty():
+                raise ValueError("Após a seleção do ano mais recente, não há dados.")
+
+            pdf = df.to_pandas()
+            pdf["country_plotly"] = pdf[REPORTER_COL].replace(NAME_FIX)
+            pdf = pdf.dropna(subset=["country_plotly"])  # remove países sem mapeamento
+            return pdf
+
+        def make_figure_and_data(pdf: pd.DataFrame, produto_escolhido: str) -> Tuple[go.Figure, pd.DataFrame, pd.DataFrame]:
+            df_prod = pdf[pdf[PRODUCT_COL] == produto_escolhido].copy()
+
+            # Remove linhas onde o valor da tarifa (usado para 'size') é nulo
+            df_prod.dropna(subset=[VAL_COL], inplace=True)
+
+            # 1. DataFrame para países com tarifa > 0 (para as bolhas)
+            df_bolhas = df_prod[df_prod[VAL_COL] > 0].copy()
+
+            # 2. DataFrame para países com tarifa == 0 (para colorir de branco)
+            df_zeros = df_prod[df_prod[VAL_COL] == 0].copy()
+
+            # Inicia a figura com o mapa de bolhas (apenas para tarifas > 0)
+            fig = px.scatter_geo(
+                df_bolhas,
+                locations="country_plotly",
+                locationmode="country names",
+                color=VAL_COL,
+                size=VAL_COL,  # Tamanho da bolha também baseado no valor
+                hover_name=REPORTER_COL,
+                custom_data=[YEAR_COL, VAL_COL], # Passar nomes das colunas para o hover
+                color_continuous_scale="Blues",
+                projection="natural earth",
+                size_max=50, # Tamanho máximo da bolha
+                labels={VAL_COL: "Tarifa Final"},
+            )
+
+            # Atualiza o hovertemplate para o scatter_geo
+            fig.update_traces(
+                hovertext=df_bolhas[REPORTER_COL], # Garante que o nome do país esteja disponível
+                hovertemplate=(
+                    "<b>%{hovertext}</b><br>"
+                    "Ano: %{customdata[0]:.0f}<br>"
+                    "Tarifa Final: %{customdata[1]:.2f}<extra></extra>"
+                ),
+                marker=dict(line=dict(width=0.5, color='rgba(0,0,0,0.7)')),
+                selector=dict(type='scattergeo') # Aplica apenas à camada de bolhas
+            )
+
+            # Top 5 — apenas colocação e nome, sem bolinhas
+            top5 = df_bolhas.nlargest(5, VAL_COL).reset_index(drop=True)
+
+            fig.add_trace(go.Scattergeo(
+                locations=top5["country_plotly"],
+                locationmode="country names",
+                text=[f"<b>{i+1}º</b>" for i in top5.index],
+                mode="text",  # apenas texto
+                textposition="top center",
+                textfont=dict(size=14, color="white", family="Arial, sans-serif"),
+                showlegend=False,
+            ))
+
+            # Layout escuro e barra de cores embaixo
+            fig.update_layout(
+                paper_bgcolor="#22232E",
+                plot_bgcolor="#22232E",
+                title=dict(
+                    text=f"Tarifas aplicadas ao Brasil por país — {produto_escolhido}",
+                    font=dict(color="white", size=18),
+                    x=0.5,
+                    xanchor="center",
+                ),
+                coloraxis_colorbar=dict(
+                    title=dict(text="Tarifa Final", font=dict(color="white")),
+                    orientation="h",
+                    x=0.5, xanchor="center",
+                    y=-0.08, yanchor="top",
+                    len=0.6,
+                    thickness=12,
+                    tickcolor="white",
+                    tickfont=dict(color="white"),
+                    outlinecolor="rgba(255,255,255,0.2)",
+                ),
+                margin=dict(l=0, r=0, t=70, b=0),
+                font=dict(color="white"),
+            )
+
+            # Geo: Estilo escuro para o mapa base, similar à referência
+            fig.update_geos(
+                showocean=True, oceancolor="#22232E",
+                showland=True, landcolor="#595959",
+                showcountries=True, countrycolor="white",
+                showcoastlines=True, coastlinecolor="white",
+                countrywidth=0.2, coastlinewidth=0.2,
+                showframe=False,
+                bgcolor="#22232E",
+            )
+
+            return fig, df_bolhas, df_zeros
+
+        # ===========================
+        # UI
+        # ===========================
+        st.markdown(
+            "<h2 style='text-align:center; color:white; margin-top:0'>Mapa de tarifas aplicadas ao Brasil</h2>",
+            unsafe_allow_html=True,
+        )
+
+        try:
+            pdf = carregar_filtrar_selecionar()
+            produtos = sorted(pdf[PRODUCT_COL].dropna().astype(str).unique().tolist())
+            if not produtos:
+                st.warning("Não há valores em 'Product Name' após o filtro aplicado.")
+                st.stop()
+
+            c1, c2, c3 = st.columns([1, 2, 1])
+            with c2:
+                produto_escolhido = st.selectbox(
+                    "Produto (digite para buscar)",
+                    options=produtos,
+                    index=0,
+                    help="Selecione ou digite para pesquisar o produto",
+                )
+
+            fig, df_com_tarifa, df_sem_tarifa = make_figure_and_data(pdf, produto_escolhido)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True})
+
+            st.caption(
+                "O tamanho e a cor da bolha representam o valor da Tarifa Final. Passe o mouse para ver os detalhes. "
+                "Os 5 maiores valores exibem rótulos fixos numerados por colocação."
+            )
+            
+            st.markdown("---")
+
+            # CSS para forçar o fundo das tabelas a ser igual ao do mapa
+            st.markdown("""
+            <style>
+                /* Alvo para o container do st.data_editor e a tabela interna */
+                .stDataFrame, .stDataFrame [data-testid="stTable"] {
+                    background-color: #22232E !important;
+                }
+                /* Cor do texto nos cabeçalhos das colunas */
+                .stDataFrame [data-testid="stTable"] .col_heading {
+                    color: white !important;
+                    background-color: #3a3c4d !important; /* Um tom ligeiramente diferente para o cabeçalho */
+                }
+                /* Cor do texto nas células de dados */
+                .stDataFrame [data-testid="stTable"] .cell-container {
+                    color: white !important;
+                    background-color: #22232E !important;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+
+            # Cria duas colunas para as tabelas
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("<h5 style='text-align: center;'>Países com Tarifa (> 0%)</h5>", unsafe_allow_html=True)
+                df_tabela_com_tarifa = df_com_tarifa[[REPORTER_COL, YEAR_COL, VAL_COL]].rename(columns={REPORTER_COL: "País", YEAR_COL: "Ano", VAL_COL: "Tarifa (%)"})
+                df_tabela_com_tarifa = df_tabela_com_tarifa.sort_values(by="Tarifa (%)", ascending=False)
+                st.data_editor(df_tabela_com_tarifa, use_container_width=True, hide_index=True, disabled=True)
+
+            with col2:
+                st.markdown("<h5 style='text-align: center;'>Oportunidades (Tarifa Zero)</h5>", unsafe_allow_html=True)
+                df_tabela_sem_tarifa = df_sem_tarifa[[REPORTER_COL, YEAR_COL, VAL_COL]].rename(columns={REPORTER_COL: "País", YEAR_COL: "Ano", VAL_COL: "Tarifa (%)"})
+                df_tabela_sem_tarifa = df_tabela_sem_tarifa.sort_values(by="País")
+                st.data_editor(df_tabela_sem_tarifa, use_container_width=True, hide_index=True, disabled=True)
+
+
+        except FileNotFoundError:
+            st.error(f"Arquivo não encontrado: {ARQ}")
+        except KeyError as e:
+            st.error(f"Problema de colunas no dataset: {e}")
+        except ValueError as e:
+            st.error(str(e))
+        except Exception as e:
+            st.exception(e)

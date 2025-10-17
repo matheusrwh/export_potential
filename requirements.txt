@@ -12,3 +12,4 @@ plotly
 numpy
 scikit-learn
 fastexcel
+psutil

@@ -1,0 +1,7 @@
+PENDÊNCIAS DO PROJETO:
+
+1 - Normalização do índice no nível ijk.
+2 - Agrupamentos e categorizações.
+3 - Inclusão das tarifas no modelo.
+4 - Análise da viabilidade de incluir outras dimensões.
+5 - Revisar projeções.

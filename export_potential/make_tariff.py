@@ -9,32 +9,20 @@ data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
 
 ######## Loading the data ########
-df_tariffs = pl.read_parquet(data_raw / 'tariffs.parquet')
+df_tariffs = pl.read_parquet(data_raw / 'tariffs.parquet').drop('Product Name')
 
 df_tariffs.head()
+df_tariffs.shape
 
 ######## Treating the data ########
 df_tariffs = df_tariffs.rename({
-    'Reporter': 'importer',
-    'Year': 'year',
-    'Partner': 'exporter',
+    'Reporter': 'importer_code',
+    'Reporter Name': 'importer_name',
+    'Partner': 'exporter_code',
+    'Partner Name': 'exporter_name',
     'Product': 'sh6',
-    'MFNRate': 'mfn_rate',
-    'AppliedTariff': 'applied_tariff',
-    'TotalTariffLines': 'total_tariff_lines',
-    'IsTraded': 'is_traded'
-})
-
-df_tariffs = df_tariffs.with_columns([
-    pl.col("sh6").str.slice(0, 6).alias("sh6_prefix"),
-    pl.col("sh6").str.slice(9).alias("sh6_suffix")
-])
-
-df_tariffs = df_tariffs.drop("sh6")
-
-df_tariffs = df_tariffs.rename({
-    'sh6_prefix': 'sh6',
-    'sh6_suffix': 'product'
+    'Tariff_Final': 'tariff',
+    'Tariff_Year': 'year'
 })
 
 df_countries = pl.read_csv(references / 'countries.csv')
@@ -43,14 +31,14 @@ df_tariffs.head()
 df_countries.head()
 
 df_tariffs = df_tariffs.join(
-    df_countries.select(['country_name', 'country_iso3']),
-    left_on='importer',
-    right_on='country_name',
+    df_countries.select(['country_code', 'country_name', 'country_iso3']),
+    left_on='importer_code',
+    right_on='country_code',
     how='left'
 ).join(
-    df_countries.select(['country_name', 'country_iso3']),
-    left_on='exporter',
-    right_on='country_name',
+    df_countries.select(['country_code', 'country_name', 'country_iso3']),
+    left_on='exporter_code',
+    right_on='country_code',
     how='left',
     suffix='_exporter'
 )
@@ -61,14 +49,15 @@ df_tariffs = df_tariffs.rename({
 })
 
 df_tariffs = df_tariffs.select([
-    'year', 'importer', 'importer_iso3', 'exporter', 'exporter_iso3',
-    'sh6', 'product', 'mfn_rate', 'applied_tariff', 'total_tariff_lines', 'is_traded'
+    'year', 'importer_name', 'importer_iso3', 'exporter_name',
+    'exporter_iso3', 'sh6', 'tariff'
 ])
 
 df_tariffs.head()
+df_tariffs.shape
 
 unique_sh6 = df_tariffs['sh6'].unique().to_list()
-print(unique_sh6)
+print(len(unique_sh6))
 
 ######## Trade elasticities ########
 df_elasticities = pl.read_csv(data_raw / 'trade_elasticities.csv')
@@ -86,3 +75,8 @@ df_tariffs = df_tariffs.join(
     on='sh6',
     how='left'
 )
+
+df_tariffs.head()
+df_tariffs.shape
+
+df_tariffs.write_parquet(data_raw / 'tariffs_processed.parquet')

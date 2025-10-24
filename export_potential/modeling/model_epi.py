@@ -2,7 +2,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 app = project_root / 'app'
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
@@ -74,7 +74,6 @@ df_epi = (
 )
 
 df_epi.head()
-
 
 ################ JOINS E FORMATAÇÃO FINAL ################
 df_countries = pl.read_csv(references / 'countries_br.csv', encoding='latin1', separator=';')

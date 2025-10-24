@@ -8,7 +8,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -193,3 +193,58 @@ df_supply_sc.write_parquet(data_processed / 'supply_potential_sc.parquet')
 
 
 
+
+########### Calculating global tariff disadvantage ##########
+df_tariffs = pl.read_parquet(data_raw / 'tariffs_processed.parquet')
+
+df_tariffs.head()
+
+df_tariffs = df_tariffs.with_columns(
+    pl.col("sh6").cast(str).str.zfill(6)
+)
+
+# Calculando a média de tarifa para cada país e cada sh6, filtrando apenas Brasil diretamente
+df_avg_tariff = (
+    df_tariffs
+    .filter(pl.col('exporter_name') == 'Brazil')
+    .group_by('sh6')
+    .agg([
+        pl.col('tariff').mean().alias('avg_tariff_br')
+    ])
+)
+
+df_avg_tariff.head()
+
+df_tariffs = df_tariffs.join(
+    df_avg_tariff,
+    on=['sh6'],
+    how='left'
+)
+
+# Calculando a média de tarifa para cada sh6 (global)
+df_avg_tariff_global = (
+    df_tariffs
+    .group_by('sh6')
+    .agg([
+        pl.col('tariff').mean().alias('avg_tariff')
+    ])
+)
+
+df_tariffs = df_tariffs.join(
+    df_avg_tariff_global,
+    on='sh6',
+    how='left'
+)
+
+df_tariffs = df_tariffs.with_columns([
+    (((1 + pl.col('avg_tariff_br'))/(1 + pl.col('avg_tariff')))**pl.col('sigma')).alias('tariff_disadvantage')
+])
+
+df_tariffs = df_tariffs.filter(pl.col('exporter_name') == 'Brazil')
+
+df_tariffs = df_tariffs.group_by('sh6').agg([
+    pl.col('tariff_disadvantage').max().alias('tariff_disadvantage')
+])
+
+df_tariffs.head()
+df_tariffs.shape

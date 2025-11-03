@@ -4,7 +4,6 @@ from pathlib import Path
 ######## Setting the directories ########
 project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
-app_data = project_root / 'app' / 'data'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
@@ -202,4 +201,4 @@ df_all = df_all.with_columns(
 
 df_all.head()
 
-df_all.write_parquet(app_data / 'df_competitors.parquet', compression='snappy')
+df_all.write_parquet(data_processed / 'df_competitors.parquet', compression='snappy')

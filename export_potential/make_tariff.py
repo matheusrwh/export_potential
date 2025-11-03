@@ -79,4 +79,4 @@ df_tariffs = df_tariffs.join(
 df_tariffs.head()
 df_tariffs.shape
 
-df_tariffs.write_parquet(data_raw / 'tariffs_processed.parquet')
+df_tariffs.write_parquet(data_interim / 'tariffs_processed.parquet')

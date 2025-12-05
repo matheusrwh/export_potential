@@ -5,9 +5,3 @@ PENDÊNCIAS DO PROJETO:
 3 - Inclusão das tarifas no modelo.
 4 - Análise da viabilidade de incluir outras dimensões.
 5 - Revisar projeções.
-
-PENDÊNCIAS DE INFRAESTRUTURA:
-
-1 - Gerar os .parquets utilizados no aplicativo.
-2 - Armazenar os .parquets em DuckDB.
-3 - Subir apenas o .duckb.

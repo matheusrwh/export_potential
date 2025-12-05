@@ -144,7 +144,7 @@ df_all = df_all.join(
 
 df_all = df_all.with_columns(
     pl.when(pl.col('exporter') == 'S19')
-    .then('Taiwan')
+    .then(pl.lit('Taiwan'))
     .otherwise(pl.col('exporter_name'))
     .alias('exporter_name')
 )
@@ -169,7 +169,7 @@ df_all = df_all.with_columns([
 
 df_all = df_all.rename({'NO_SH6_POR': 'product_description_br'})
 
-
+df_all.head()
 
 
 
@@ -189,7 +189,7 @@ df_all = df_all.rename({'NO_SH6_POR': 'product_description_br'})
 df_all_year_filtered = df_all.filter(pl.col('year') == 2023)
 
 df_defence_countries = (
-    df_all_year_filtered.group_by('exporter').agg([
+    df_all_year_filtered.group_by('exporter_name').agg([
         pl.sum('weighted_exports').alias('total_weighted_exports_defence')
     ])
     .with_columns(
@@ -200,7 +200,7 @@ df_defence_countries = (
 
 #######################################
 df_defence_countries_sh6 = (
-    df_all_year_filtered.group_by(['exporter', 'sh6', 'product_description']).agg([
+    df_all_year_filtered.group_by(['exporter_name', 'sh6_product', 'product_description_br']).agg([
         pl.sum('weighted_exports').alias('total_weighted_exports_defence_sh6')
     ])
     .with_columns(
@@ -212,9 +212,12 @@ df_defence_countries_sh6 = (
 
 # Dataframe completo: produtos de defesa entre 2019 e 2023 por país, com CAGR
 df_all.head()
+df_all.write_excel(data_processed / 'export_potential_defence_complete.xlsx')
 
 # Dataframe agrupado por país com média ponderada das exportações nos últimos 5 anos
 df_defence_countries.head()
+df_defence_countries.write_excel(data_processed / 'export_potential_defence_countries.xlsx')
 
 # Dataframe agrupado por país e produto (sh6) com média ponderada das exportações nos últimos 5 anos
 df_defence_countries_sh6.head()
+df_defence_countries_sh6.write_excel(data_processed / 'export_potential_defence_countries_sh6.xlsx')

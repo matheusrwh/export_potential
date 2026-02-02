@@ -8,7 +8,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -139,7 +139,7 @@ df_growth = df_growth.select(['ISO', 'demand_index_2027'])
 df_growth.head()
 
 ######### Merging demand growth with trade data ########
-df_demand = df_all.filter(pl.col('year') == 2023)
+df_demand = df_all.filter(pl.col('year') == 2024)
 
 df_demand = df_demand.join(
     df_growth,

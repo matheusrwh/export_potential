@@ -61,20 +61,23 @@ df_all_bra = df_all_bra.with_columns([
 
 df_all_bra.head()
 
-# Calculating weighted average of exports of SC over the last 5 years
-pesos = [0.2, 0.4, 0.6, 0.8, 1.0]
+# Calculating weighted average of exports of SC over the last 8 years
+pesos = [i / 7 for i in range(8)]
 
-recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:5]
+recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:8]
 df_recent = df_all_bra.filter(pl.col('year').is_in(recent_years))
 
 weighted_exports = (
     df_recent
     .with_columns([
-        pl.when(pl.col('year') == recent_years[0]).then(pesos[4])
-         .when(pl.col('year') == recent_years[1]).then(pesos[3])
-         .when(pl.col('year') == recent_years[2]).then(pesos[2])
-         .when(pl.col('year') == recent_years[3]).then(pesos[1])
-         .when(pl.col('year') == recent_years[4]).then(pesos[0])
+        pl.when(pl.col('year') == recent_years[0]).then(pesos[7])
+         .when(pl.col('year') == recent_years[1]).then(pesos[6])
+         .when(pl.col('year') == recent_years[2]).then(pesos[5])
+         .when(pl.col('year') == recent_years[3]).then(pesos[4])
+         .when(pl.col('year') == recent_years[4]).then(pesos[3])
+         .when(pl.col('year') == recent_years[5]).then(pesos[2])
+         .when(pl.col('year') == recent_years[6]).then(pesos[1])
+         .when(pl.col('year') == recent_years[7]).then(pesos[0])
          .otherwise(0)
          .alias('peso')
     ])
@@ -93,7 +96,7 @@ df_all_bra = df_all_bra.join(
     how='left'
 )
 
-df_all_bra = df_all_bra.filter(pl.col('year') == 2023)
+df_all_bra = df_all_bra.filter(pl.col('year') == 2024)
 
 df_all_bra.head()
 df_all_bra.shape
@@ -105,10 +108,10 @@ df_all_bra.shape
 
 
 ########## Projecting exports for SC ##########
-acc_growth_gdp = 1.195
+acc_growth_gdp = 1.294
 
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2027')
+    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2029')
 ])
 
 ########## Projecting exports for all countries ##########
@@ -124,24 +127,24 @@ for col in df_gdp_growth.columns:
             pl.col(col).fill_null(mean_value).alias(col)
         )
 
-# Accumulated growth from 2022 to 2027
-growth_cols = [str(year) for year in range(2022, 2028)]
+# Accumulated growth from 2022 to 2029
+growth_cols = [str(year) for year in range(2022, 2030)]
 
 df_gdp_growth = df_gdp_growth.with_columns([
     pl.fold(
         acc=pl.lit(1.0),
         function=lambda acc, x: acc * (1 + x),
         exprs=[pl.col(col) for col in growth_cols]
-    ).alias('gdp_index_2027')
+    ).alias('gdp_index_2029')
 ])
 
-df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2027'])
+df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2029'])
 
 df_all.head()
 df_gdp_growth.head()
 
 # Calculating projected exports for all countries
-df_all = df_all.filter(pl.col('year') == 2023)
+df_all = df_all.filter(pl.col('year') == 2024)
 
 df_all = df_all.join(
     df_gdp_growth,
@@ -151,7 +154,7 @@ df_all = df_all.join(
 )
 
 df_all = df_all.with_columns([
-    (pl.col('weighted_exports') * pl.col('gdp_index_2027')).alias('proj_exports_2027')
+    (pl.col('weighted_exports') * pl.col('gdp_index_2029')).alias('proj_exports_2029')
 ])
 
 
@@ -163,29 +166,29 @@ df_all_bra.head()
 df_all.head()
 
 df_all = df_all.join(
-    df_all_bra.select(['exporter', 'sh6', 'proj_exports_sc_2027']),
+    df_all_bra.select(['exporter', 'sh6', 'proj_exports_sc_2029']),
     on=['exporter', 'sh6'],
     how='left'
 )
 
 df_all = df_all.with_columns([
     (
-        pl.col('proj_exports_sc_2027') / pl.sum('proj_exports_2027').over('sh6')
-    ).alias('sc_share_proj_2027')
+        pl.col('proj_exports_sc_2029') / pl.sum('proj_exports_2029').over('sh6')
+    ).alias('sc_share_proj_2029')
 ])
 
-df_supply_sc = df_all.filter(pl.col('sc_share_proj_2027').is_not_null())
+df_supply_sc = df_all.filter(pl.col('sc_share_proj_2029').is_not_null())
 
 df_supply_sc = df_supply_sc.select([
     'exporter',
     'sh6',
     'product_description',
     'weighted_exports',
-    'proj_exports_sc_2027',
-    'sc_share_proj_2027'
+    'proj_exports_sc_2029',
+    'sc_share_proj_2029'
 ])
 
-df_supply_sc = df_supply_sc.sort('sc_share_proj_2027', descending=True)
+df_supply_sc = df_supply_sc.sort('sc_share_proj_2029', descending=True)
 
 df_supply_sc.head()
 
@@ -195,7 +198,7 @@ df_supply_sc.write_parquet(data_processed / 'supply_potential_sc.parquet')
 
 
 ########### Calculating global tariff disadvantage ##########
-df_tariffs = pl.read_parquet(data_raw / 'tariffs_processed.parquet')
+df_tariffs = pl.read_parquet(data_interim / 'tariffs_processed.parquet')
 
 df_tariffs.head()
 

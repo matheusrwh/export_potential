@@ -8,7 +8,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -116,20 +116,23 @@ df_all_bra = df_all_bra.with_columns([
     (pl.col('value') * pl.col('share_sc')).alias('value_sc')
 ])
 
-# Calculating weighted average of exports of SC over the last 5 years
-pesos = [0.2, 0.4, 0.6, 0.8, 1.0]
+# Calculating weighted average of exports of SC over the last 8 years
+pesos = [i / 7 for i in range(8)]
 
-recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:5]
+recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:8]
 df_recent = df_all_bra.filter(pl.col('year').is_in(recent_years))
 
 weighted_exports = (
     df_recent
     .with_columns([
-        pl.when(pl.col('year') == recent_years[0]).then(pesos[4])
-         .when(pl.col('year') == recent_years[1]).then(pesos[3])
-         .when(pl.col('year') == recent_years[2]).then(pesos[2])
-         .when(pl.col('year') == recent_years[3]).then(pesos[1])
-         .when(pl.col('year') == recent_years[4]).then(pesos[0])
+        pl.when(pl.col('year') == recent_years[0]).then(pesos[7])
+         .when(pl.col('year') == recent_years[1]).then(pesos[6])
+         .when(pl.col('year') == recent_years[2]).then(pesos[5])
+         .when(pl.col('year') == recent_years[3]).then(pesos[4])
+         .when(pl.col('year') == recent_years[4]).then(pesos[3])
+         .when(pl.col('year') == recent_years[5]).then(pesos[2])
+         .when(pl.col('year') == recent_years[6]).then(pesos[1])
+         .when(pl.col('year') == recent_years[7]).then(pesos[0])
          .otherwise(0)
          .alias('peso')
     ])
@@ -148,7 +151,7 @@ df_all_bra = df_all_bra.join(
     how='left'
 )
 
-df_all_bra = df_all_bra.filter(pl.col('year') == 2023)
+df_all_bra = df_all_bra.filter(pl.col('year') == 2024)
 
 df_bilateral = df_all_bra.group_by(['exporter', 'importer']).agg([
     pl.sum('weighted_exports_sc').alias('bilateral_exports_sc')
@@ -171,16 +174,16 @@ df_demand.head()
 df_supply_sc.head()
 
 df_demand = df_demand.join(
-    df_supply_sc.select(['sh6', 'sc_share_proj_2027']),
+    df_supply_sc.select(['sh6', 'sc_share_proj_2029']),
     on='sh6',
     how='left'
 )
 
 df_ease = df_demand.select(['importer', 'sh6', 'product_description',
-                            'weighted_imports', 'sc_share_proj_2027'])
+                            'weighted_imports', 'sc_share_proj_2029'])
 
 df_ease = df_ease.with_columns([
-    (pl.col('weighted_imports') * pl.col('sc_share_proj_2027')).alias('value_sc')
+    (pl.col('weighted_imports') * pl.col('sc_share_proj_2029')).alias('value_sc')
 ])
 
 df_ease = df_ease.group_by(['importer']).agg([

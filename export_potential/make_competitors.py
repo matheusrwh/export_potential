@@ -128,8 +128,8 @@ df_all = df_all.filter(
 df_all.head()
 df_all.shape
 
-########### Calculating the cagr_5y ###########
-# Calculando a CAGR de 5 anos das exportações do produto sh6 por país importador
+########### Calculating the cagr_8y ###########
+# Calculando a CAGR de 8 anos das exportações do produto sh6 por país importador
 def calculate_cagr(df, value_col, year_col):
     min_year = df[year_col].min()
     max_year = df[year_col].max()
@@ -151,19 +151,19 @@ cagr_df = (
         pl.col('value').filter(pl.col('year') == pl.col('year').max()).sum().alias('end_value')
     ])
     .with_columns([
-        (((pl.col('end_value') / pl.col('start_value')) ** (1 / (pl.col('max_year') - pl.col('min_year'))) - 1)*100).alias('cagr_5y')
+        (((pl.col('end_value') / pl.col('start_value')) ** (1 / (pl.col('max_year') - pl.col('min_year'))) - 1)*100).alias('cagr_8y')
     ])
 )
 
 cagr_df.head()
 
 df_all = df_all.join(
-    cagr_df.select(['exporter', 'importer', 'sh6', 'cagr_5y']),
+    cagr_df.select(['exporter', 'importer', 'sh6', 'cagr_8y']),
     on=['exporter', 'importer', 'sh6'],
     how='left'
 )
 
-df_all = df_all.filter(pl.col('year') == 2023)
+df_all = df_all.filter(pl.col('year') == 2024)
 
 df_all = df_all.with_columns([
     pl.col('value').sum().over(['importer', 'sh6']).alias('importer_sh6_total_value')
@@ -178,7 +178,7 @@ df_all.shape
 
 df_all = df_all.select([
     'year', 'exporter', 'exporter_name', 'importer', 'importer_name',
-    'sh6', 'product_description_br', 'sh6_product', 'value', 'cagr_5y', 'importer_sh6_share'])
+    'sh6', 'product_description_br', 'sh6_product', 'value', 'cagr_8y', 'importer_sh6_share'])
 
 def format_contabil(value):
     if value >= 1e9:
@@ -194,7 +194,7 @@ def format_decimal(value, decimals=1):
     return f"{value:.{decimals}f}".replace(".", ",")
 
 df_all = df_all.with_columns(
-    pl.col("cagr_5y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_5y_adj"),
+    pl.col("cagr_8y").map_elements(lambda x: format_decimal(x, 1)).alias("cagr_8y_adj"),
     pl.col('value').map_elements(format_contabil).alias('value_contabil'),
     pl.col('importer_sh6_share').map_elements(lambda x: format_decimal(x, 2)).alias('importer_sh6_share')
 )

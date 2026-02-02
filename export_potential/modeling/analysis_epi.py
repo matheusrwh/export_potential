@@ -12,7 +12,7 @@ project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
-app_data = project_root / 'app' / 'data'
+app_data = project_root / 'data' / 'app'
 references = project_root / 'references'
 
 def clusterize_group(group):

@@ -2,7 +2,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -73,19 +73,22 @@ df_all = df_all.group_by([
     pl.sum('quantity').alias('quantity')
 ])
 
-pesos = [0.2, 0.4, 0.6, 0.8, 1.0]
+pesos = [i / 7 for i in range(8)]
 
-recent_years = sorted(df_all['year'].unique(), reverse=True)[:5]
+recent_years = sorted(df_all['year'].unique(), reverse=True)[:8]
 df_recent = df_all.filter(pl.col('year').is_in(recent_years))
 
 weighted_exports = (
     df_recent
     .with_columns([
-        pl.when(pl.col('year') == recent_years[0]).then(pesos[4])
-         .when(pl.col('year') == recent_years[1]).then(pesos[3])
-         .when(pl.col('year') == recent_years[2]).then(pesos[2])
-         .when(pl.col('year') == recent_years[3]).then(pesos[1])
-         .when(pl.col('year') == recent_years[4]).then(pesos[0])
+        pl.when(pl.col('year') == recent_years[0]).then(pesos[7])
+         .when(pl.col('year') == recent_years[1]).then(pesos[6])
+         .when(pl.col('year') == recent_years[2]).then(pesos[5])
+         .when(pl.col('year') == recent_years[3]).then(pesos[4])
+         .when(pl.col('year') == recent_years[4]).then(pesos[3])
+         .when(pl.col('year') == recent_years[5]).then(pesos[2])
+         .when(pl.col('year') == recent_years[6]).then(pesos[1])
+         .when(pl.col('year') == recent_years[7]).then(pesos[0])
          .otherwise(0)
          .alias('peso')
     ])
@@ -104,7 +107,7 @@ df_all = df_all.join(
     how='left'
 )
 
-df_all = df_all.filter(pl.col('year') == 2023)
+df_all = df_all.filter(pl.col('year') == 2024)
 
 df_all.head()
 df_all.shape

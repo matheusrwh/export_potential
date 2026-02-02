@@ -35,7 +35,7 @@ df_epi = df_supply.join(
 df_epi.head()
 
 df_epi = df_epi.with_columns([
-    (pl.col('sc_share_proj_2027') * pl.col('projected_import_value') * pl.col('ease_of_trade')).alias('epi_score')
+    (pl.col('sc_share_proj_2029') * pl.col('projected_import_value') * pl.col('ease_of_trade')).alias('epi_score')
 ])
 
 df_epi = df_epi.sort('epi_score', descending=True)
@@ -47,7 +47,7 @@ df_epi.head()
 #### Normalizing the EPI scores between 0 and 1 ####
 df_epi = df_epi.with_columns([
     pl.col('epi_score').fill_null(0).alias('epi_score'),
-    pl.col('proj_exports_sc_2027').fill_null(0).alias('proj_exports_sc_2027'),
+    pl.col('proj_exports_sc_2029').fill_null(0).alias('proj_exports_sc_2029'),
     pl.col('bilateral_exports_sc_sh6').fill_null(0).alias('bilateral_exports_sc_sh6'),
 ])
 
@@ -151,7 +151,7 @@ df_epi['color'] = df_epi['sc_comp'].apply(lambda x: cores_comp.get(x, '#000000')
 df_epi = pl.from_pandas(df_epi)
 
 df_epi = df_epi.select(['exporter', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br', 'sc_comp', 'color',
-                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2027', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
+                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2029', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
 
 df_epi.head()
 df_epi.shape

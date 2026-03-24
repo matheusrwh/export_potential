@@ -8,7 +8,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -107,7 +107,7 @@ df_all_bra.shape
 
 
 
-########## Projecting exports for SC ##########
+########## Projecting exports for SC  - REVISAR ##########
 acc_growth_gdp = 1.294
 
 df_all_bra = df_all_bra.with_columns([

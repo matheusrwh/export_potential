@@ -14,7 +14,7 @@ import polars as pl
 
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 
@@ -61,8 +61,8 @@ df = df.with_columns(
     [
         finite_or_zero("projected_import_value"),
         finite_or_zero("ease_of_trade"),
-        finite_or_zero("sc_share_proj_2029"),
-        finite_or_zero("proj_exports_sc_2029"),
+        finite_or_zero("sc_share_proj_2030"),
+        finite_or_zero("proj_exports_sc_2030"),
         finite_or_zero("bilateral_exports_sc_sh6"),
     ]
 )
@@ -72,7 +72,7 @@ df = df.with_columns(
 df = df.with_columns(
     [
         (
-            pl.col("sc_share_proj_2029")
+            pl.col("sc_share_proj_2030")
             * pl.col("projected_import_value")
             * pl.col("ease_of_trade")
         )
@@ -95,7 +95,7 @@ df = df.with_columns(
 
 df = df.with_columns(
     [
-        (pl.col("proj_exports_sc_2029") * pl.col("epi_weight_share")).alias(
+        (pl.col("proj_exports_sc_2030") * pl.col("epi_weight_share")).alias(
             "allocated_supply_value"
         ),
         pl.col("epi_score").alias("market_feasible_value"),

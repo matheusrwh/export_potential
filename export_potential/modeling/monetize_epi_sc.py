@@ -14,7 +14,7 @@ import polars as pl
 
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 
@@ -36,11 +36,12 @@ df_demand = pl.read_parquet(data_processed / "demand_potential.parquet")
 df_supply = pl.read_parquet(data_processed / "supply_potential_sc.parquet")
 df_bilateral = pl.read_parquet(data_interim / "bilateral_exports_sh6.parquet")
 
+df_supply.head()
 
 ######## Building product-market panel ########
 df = (
     df_supply.join(
-        df_demand.select(["importer", "sh6", "projected_import_value"]),
+        df_demand.select(["importer", "sh6", "product_description", "projected_import_value"]),
         on=["sh6"],
         how="left",
     )
@@ -135,77 +136,72 @@ df = df.with_columns(
 
 
 ######## Saving detailed output ########
+final_columns = [
+    "exporter",
+    "importer",
+    "sh6",
+    "product_description",
+    "potential_value",
+    "unrealized_potential_value",
+    "potential_utilization_ratio",
+]
+
 df_out = df.select(
-    [
-        "exporter",
-        "importer",
-        "sh6",
-        "projected_import_value",
-        "ease_of_trade",
-        "sc_share_proj_2029",
-        "proj_exports_sc_2029",
-        "bilateral_exports_sc_sh6",
-        "epi_score",
-        "epi_weight_share",
-        "allocated_supply_value",
-        "market_feasible_value",
-        "potential_value",
-        "unrealized_potential_value",
-        "realized_potential_value",
-        "overtrade_value",
-        "potential_utilization_ratio",
-    ]
+    final_columns
 )
 
-df_out.write_parquet(data_processed / "epi_monetary_sc.parquet")
+df_out.write_json(data_processed / "epi_monetary_sc.json")
 
 
 ######## Saving aggregated outputs ########
 df_country = (
-    df_out.group_by(["importer"])
+    df.group_by(["importer"])
     .agg(
         [
-            pl.sum("bilateral_exports_sc_sh6").alias("bilateral_exports_sc"),
+            pl.col("exporter").first().alias("exporter"),
             pl.sum("potential_value").alias("potential_value"),
             pl.sum("unrealized_potential_value").alias("unrealized_potential_value"),
-            pl.sum("realized_potential_value").alias("realized_potential_value"),
-            pl.sum("overtrade_value").alias("overtrade_value"),
+            pl.sum("bilateral_exports_sc_sh6").alias("bilateral_exports_sc"),
         ]
     )
     .with_columns(
         [
+            pl.lit(None).cast(pl.Utf8).alias("sh6"),
+            pl.lit(None).cast(pl.Utf8).alias("product_description"),
             pl.when(pl.col("potential_value") > 0)
             .then(pl.col("bilateral_exports_sc") / pl.col("potential_value"))
             .otherwise(0.0)
             .alias("potential_utilization_ratio"),
         ]
     )
+    .select(final_columns)
     .sort("unrealized_potential_value", descending=True)
 )
 
-df_country.write_parquet(data_processed / "epi_monetary_sc_country.parquet")
+df_country.write_json(data_processed / "epi_monetary_sc_country.json")
 
 df_product = (
-    df_out.group_by(["sh6"])
+    df.group_by(["sh6"])
     .agg(
         [
-            pl.sum("bilateral_exports_sc_sh6").alias("bilateral_exports_sc_sh6"),
-            pl.max("proj_exports_sc_2029").alias("proj_exports_sc_2029"),
+            pl.col("exporter").first().alias("exporter"),
+            pl.col("product_description").first().alias("product_description"),
             pl.sum("potential_value").alias("potential_value"),
             pl.sum("unrealized_potential_value").alias("unrealized_potential_value"),
-            pl.sum("realized_potential_value").alias("realized_potential_value"),
-            pl.sum("overtrade_value").alias("overtrade_value"),
+            pl.sum("bilateral_exports_sc_sh6").alias("bilateral_exports_sc_sh6"),
         ]
     )
     .with_columns(
         [
+            pl.lit(None).cast(pl.Utf8).alias("importer"),
             pl.when(pl.col("potential_value") > 0)
             .then(pl.col("bilateral_exports_sc_sh6") / pl.col("potential_value"))
             .otherwise(0.0)
             .alias("potential_utilization_ratio"),
         ]
     )
+    .select(final_columns)
     .sort("unrealized_potential_value", descending=True)
 )
 
-df_product.write_parquet(data_processed / "epi_monetary_sc_sh6.parquet")
+df_product.write_json(data_processed / "epi_monetary_sc_sh6.json")

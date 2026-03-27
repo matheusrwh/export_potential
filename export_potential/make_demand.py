@@ -33,11 +33,11 @@ df_pop = df_pop.with_columns([
     pl.col(df_pop.columns[2:]).cast(pl.Int64)
 ])
 
-# Calculating the CAGR for population between 2015 and 2021
+# Calculating the CAGR for population between 2016 and 2024
 df_pop = df_pop.with_columns([
     (
-        ((pl.col('2021') / pl.col('2015')) ** (1 / (2021 - 2015)) - 1)
-    ).alias('CAGR_2015_2021')
+        ((pl.col('2024') / pl.col('2016')) ** (1 / (2024 - 2016)) - 1)
+    ).alias('CAGR_2016_2024')
 ])
 
 df_pop = df_pop.with_columns([
@@ -45,25 +45,26 @@ df_pop = df_pop.with_columns([
     for col in df_pop.columns[2:]
 ])
 
-# Substituting missing values for years after 2015 using the CAGR
-for year in df_pop.columns[2:-1]:  # Ignora 'CAGR_2015_2021'
+# Substituting missing values for years after 2016 using the CAGR
+for year in range(2017, 2025):  # Years from 2017 to 2024
+    year_str = str(year)
     df_pop = df_pop.with_columns([
-        pl.when(pl.col(year).is_null())
-        .then((pl.col('2015') * ((1 + pl.col('CAGR_2015_2021')) ** (int(year) - 2015))).cast(pl.Int64))
-        .otherwise(pl.col(year))
-        .alias(year)
+        pl.when(pl.col(year_str).is_null())
+        .then((pl.col('2016') * ((1 + pl.col('CAGR_2016_2024')) ** (year - 2016))).cast(pl.Int64))
+        .otherwise(pl.col(year_str))
+        .alias(year_str)
     ])
 
-# Calculating the annual growth rates from 2022 to 2027
-for year in range(2022, 2028):
+# Calculating the annual growth rates from 2025 to 2030
+for year in range(2025, 2031):
     prev_year = str(year - 1)
     curr_year = str(year)
     df_pop = df_pop.with_columns([
         ((pl.col(curr_year) / pl.col(prev_year)) - 1).alias(f'growth_{curr_year}')
     ])
 
-# Calculating the cumulative growth index from 2022 to 2027
-growth_cols = [f'growth_{year}' for year in range(2022, 2028)]
+# Calculating the cumulative growth index from 2025 to 2030
+growth_cols = [f'growth_{year}' for year in range(2025, 2031)]
 df_pop = df_pop.with_columns([
     (
         pl.fold(
@@ -71,10 +72,10 @@ df_pop = df_pop.with_columns([
             function=lambda acc, x: acc * (1 + x),
             exprs=[pl.col(col) for col in growth_cols]
         ).cast(pl.Float64)
-    ).alias('pop_index_2027')
+    ).alias('pop_index_2030')
 ])
 
-df_pop_growth = df_pop.select(['ISO', 'pop_index_2027'])
+df_pop_growth = df_pop.select(['ISO', 'pop_index_2030'])
 
 df_pop_growth.head()
 
@@ -92,18 +93,18 @@ for col in df_gdp_growth.columns:
             pl.col(col).fill_null(mean_value).alias(col)
         )
 
-# Accumulated growth from 2022 to 2027
-growth_cols = [str(year) for year in range(2022, 2028)]
+# Accumulated growth from 2025 to 2030
+growth_cols = [str(year) for year in range(2025, 2031)]
 
 df_gdp_growth = df_gdp_growth.with_columns([
     pl.fold(
         acc=pl.lit(1.0),
         function=lambda acc, x: acc * (1 + x),
         exprs=[pl.col(col) for col in growth_cols]
-    ).alias('gdp_index_2027')
+    ).alias('gdp_index_2030')
 ])
 
-df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2027'])
+df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2030'])
 
 df_pop_growth.head()
 df_gdp_growth.head()
@@ -121,20 +122,20 @@ df_growth = df_gdp_growth.join(
 df_growth.head()
 
 df_growth = df_growth.with_columns([
-    (pl.col('gdp_index_2027') / pl.col('pop_index_2027')).alias('gdp_pc_index_2027'),
+    (pl.col('gdp_index_2030') / pl.col('pop_index_2030')).alias('gdp_pc_index_2030'),
 ])
 
 ############### Mean elasticity == 1.201 ################
 df_growth = df_growth.with_columns([
-    (pl.col('gdp_pc_index_2027') ** (1.201)).alias('gdp_pc_adj_index_2027')
+    (pl.col('gdp_pc_index_2030') ** (1.201)).alias('gdp_pc_adj_index_2030')
 ])
 
 ######## Estimating demand growth ##########
 df_growth = df_growth.with_columns([
-    (pl.col('gdp_pc_adj_index_2027') * pl.col('pop_index_2027')).alias('demand_index_2027')
+    (pl.col('gdp_pc_adj_index_2030') * pl.col('pop_index_2030')).alias('demand_index_2030')
 ])
 
-df_growth = df_growth.select(['ISO', 'demand_index_2027'])
+df_growth = df_growth.select(['ISO', 'demand_index_2030'])
 
 df_growth.head()
 
@@ -150,7 +151,7 @@ df_demand = df_demand.join(
 
 df_demand = df_demand.with_columns([
     (
-        pl.col('weighted_imports') * pl.col('demand_index_2027').over('sh6')
+        pl.col('weighted_imports') * pl.col('demand_index_2030').over('sh6')
     ).alias('projected_import_value')
 ])
 
@@ -161,7 +162,7 @@ df_demand = df_demand.select([
     'sh6',
     'product_description',
     'weighted_imports',
-    'demand_index_2027',
+    'demand_index_2030',
     'projected_import_value'
 ])
 

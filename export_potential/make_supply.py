@@ -107,11 +107,11 @@ df_all_bra.shape
 
 
 
-########## Projecting exports for SC  - REVISAR ##########
-acc_growth_gdp = 1.294
+########## Projecting exports for SC  - HORIZONTE: 2030 ##########
+acc_growth_gdp = 1.202
 
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2029')
+    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2030')
 ])
 
 ########## Projecting exports for all countries ##########
@@ -127,18 +127,18 @@ for col in df_gdp_growth.columns:
             pl.col(col).fill_null(mean_value).alias(col)
         )
 
-# Accumulated growth from 2022 to 2029
-growth_cols = [str(year) for year in range(2022, 2030)]
+# Accumulated growth from 2022 to 2030
+growth_cols = [str(year) for year in range(2022, 2031)]
 
 df_gdp_growth = df_gdp_growth.with_columns([
     pl.fold(
         acc=pl.lit(1.0),
         function=lambda acc, x: acc * (1 + x),
         exprs=[pl.col(col) for col in growth_cols]
-    ).alias('gdp_index_2029')
+    ).alias('gdp_index_2030')
 ])
 
-df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2029'])
+df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2030'])
 
 df_all.head()
 df_gdp_growth.head()
@@ -154,7 +154,7 @@ df_all = df_all.join(
 )
 
 df_all = df_all.with_columns([
-    (pl.col('weighted_exports') * pl.col('gdp_index_2029')).alias('proj_exports_2029')
+    (pl.col('weighted_exports') * pl.col('gdp_index_2030')).alias('proj_exports_2030')
 ])
 
 
@@ -166,29 +166,29 @@ df_all_bra.head()
 df_all.head()
 
 df_all = df_all.join(
-    df_all_bra.select(['exporter', 'sh6', 'proj_exports_sc_2029']),
+    df_all_bra.select(['exporter', 'sh6', 'proj_exports_sc_2030']),
     on=['exporter', 'sh6'],
     how='left'
 )
 
 df_all = df_all.with_columns([
     (
-        pl.col('proj_exports_sc_2029') / pl.sum('proj_exports_2029').over('sh6')
-    ).alias('sc_share_proj_2029')
+        pl.col('proj_exports_sc_2030') / pl.sum('proj_exports_2030').over('sh6')
+    ).alias('sc_share_proj_2030')
 ])
 
-df_supply_sc = df_all.filter(pl.col('sc_share_proj_2029').is_not_null())
+df_supply_sc = df_all.filter(pl.col('sc_share_proj_2030').is_not_null())
 
 df_supply_sc = df_supply_sc.select([
     'exporter',
     'sh6',
     'product_description',
     'weighted_exports',
-    'proj_exports_sc_2029',
-    'sc_share_proj_2029'
+    'proj_exports_sc_2030',
+    'sc_share_proj_2030'
 ])
 
-df_supply_sc = df_supply_sc.sort('sc_share_proj_2029', descending=True)
+df_supply_sc = df_supply_sc.sort('sc_share_proj_2030', descending=True)
 
 df_supply_sc.head()
 

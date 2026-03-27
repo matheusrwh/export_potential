@@ -8,7 +8,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
@@ -174,16 +174,16 @@ df_demand.head()
 df_supply_sc.head()
 
 df_demand = df_demand.join(
-    df_supply_sc.select(['sh6', 'sc_share_proj_2029']),
+    df_supply_sc.select(['sh6', 'sc_share_proj_2030']),
     on='sh6',
     how='left'
 )
 
 df_ease = df_demand.select(['importer', 'sh6', 'product_description',
-                            'weighted_imports', 'sc_share_proj_2029'])
+                            'weighted_imports', 'sc_share_proj_2030'])
 
 df_ease = df_ease.with_columns([
-    (pl.col('weighted_imports') * pl.col('sc_share_proj_2029')).alias('value_sc')
+    (pl.col('weighted_imports') * pl.col('sc_share_proj_2030')).alias('value_sc')
 ])
 
 df_ease = df_ease.group_by(['importer']).agg([

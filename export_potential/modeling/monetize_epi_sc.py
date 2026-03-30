@@ -14,7 +14,7 @@ import polars as pl
 
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 
@@ -150,7 +150,7 @@ df_out = df.select(
     final_columns
 )
 
-df_out.write_json(data_processed / "epi_monetary_sc.json")
+df_out.write_parquet(data_processed / "epi_monetary_sc.parquet")
 
 
 ######## Saving aggregated outputs ########
@@ -178,7 +178,7 @@ df_country = (
     .sort("unrealized_potential_value", descending=True)
 )
 
-df_country.write_json(data_processed / "epi_monetary_sc_country.json")
+df_country.write_parquet(data_processed / "epi_monetary_sc_country.parquet")
 
 df_product = (
     df.group_by(["sh6"])
@@ -204,4 +204,4 @@ df_product = (
     .sort("unrealized_potential_value", descending=True)
 )
 
-df_product.write_json(data_processed / "epi_monetary_sc_sh6.json")
+df_product.write_parquet(data_processed / "epi_monetary_sc_sh6.parquet")

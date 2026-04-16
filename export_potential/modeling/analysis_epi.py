@@ -1,3 +1,4 @@
+#%%
 import polars as pl
 from pathlib import Path
 from sklearn.cluster import KMeans
@@ -8,12 +9,14 @@ import warnings
 warnings.filterwarnings("ignore")
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
 app_data = project_root / 'data' / 'app'
 references = project_root / 'references'
+
+#%%
 
 def clusterize_group(group):
     group = group.copy()
@@ -31,9 +34,10 @@ df_epi = pl.read_parquet(data_processed / 'epi_scores.parquet')
 
 df_epi.head()
 
+#%%
 ######################### AGREGGATING BY PRODUCT #########################
 df_epi_sh6 = df_epi.group_by(['sh6', 'sh6_product', 'product_description_br', 'sc_comp', 'color']).agg([
-    pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
+    pl.sum('bilateral_exports_uf_sh6').alias('bilateral_exports_uf_sh6'),
     pl.sum('epi_score').alias('epi_score'),
 ])
 
@@ -60,7 +64,7 @@ df_epi = df_epi.with_columns([
 ])
 
 df_epi_country = df_epi.group_by(['importer', 'importer_name']).agg([
-    pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
+    pl.sum('bilateral_exports_uf_sh6').alias('bilateral_exports_uf_sh6'),
     pl.sum('epi_score').alias('epi_score'),
 ])
 
@@ -98,7 +102,7 @@ df_epi.write_parquet(app_data / 'epi_scores.parquet')
 
 ######################### SC COMPETITIVA #########################
 df_epi_comp = df_epi.group_by(['sc_comp', 'color']).agg([
-    pl.sum('bilateral_exports_sc_sh6').alias('bilateral_exports_sc_sh6'),
+    pl.sum('bilateral_exports_uf_sh6').alias('bilateral_exports_uf_sh6'),
     pl.sum('epi_score').alias('epi_score'),
 ])
 
@@ -118,3 +122,5 @@ df_epi_comp = df_epi_comp.sort('epi_score_normalized', descending=False)
 df_epi_comp.write_parquet(app_data / 'epi_scores_sc_comp.parquet')
 
 df_epi_comp.head()
+
+# %%

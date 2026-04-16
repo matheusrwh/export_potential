@@ -3,7 +3,7 @@
 SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
 ################################################################
 '''
-
+#%% 
 import polars as pl
 from pathlib import Path
 
@@ -14,59 +14,64 @@ data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
 
+#%% 
 ######## Loading the data ########
 df_all = pl.read_parquet(data_interim / 'comex_exps_weighted.parquet')
 
 df_all.head()
 
+#%% 
+df_shares_uf = pl.read_csv(references / 'share-ufs.csv',
+                           null_values=['null'],
+                           schema_overrides={'cd_sh6': pl.String})
+
+df_shares_uf.head()
+
+
+#%% 
 ######## Filtering for Brazil and estimating SC share ########
 df_all_bra = df_all.filter(pl.col('exporter') == 'BRA')
 
 df_all_bra.head()
 
-df_shares_sc = pl.read_excel(references / 'share_sc.xlsx')
 
-df_all_bra.head()
-df_shares_sc.head()
+#%% 
 
-df_shares_sc = df_shares_sc.with_columns([
-    pl.col('sh6').cast(pl.Int64)
+df_shares_uf = df_shares_uf.with_columns([
+    pl.col('cd_sh6').cast(pl.Int64)
 ])
 
-df_shares_sc = df_shares_sc.unpivot(
-    index=['sh6'],
-    on=[col for col in df_shares_sc.columns if col != 'sh6'],
-    variable_name='ano',
-    value_name='share_sc'
-)
+df_shares_uf.head()
 
-df_shares_sc = df_shares_sc.with_columns([
-    pl.col('ano').cast(pl.Int64)
-])
-
-df_shares_sc.head()
-
-# Joining the SC shares with the main dataframe
+#%% 
+# Joining the UF shares with the main dataframe
 df_all_bra = df_all_bra.join(
-    df_shares_sc,
+    df_shares_uf,
     left_on=['sh6', 'year'],
-    right_on=['sh6', 'ano'],
+    right_on=['cd_sh6', 'nr_ano'],
     how='left'
 )
 
+df_all_bra.head()
+
+#%% 
 # Calculating the value of exports of SC
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('value') * pl.col('share_sc')).alias('valor_sc')
+    (pl.col('value') * pl.col('pct_participacao')).alias('valor_uf')
 ])
 
 df_all_bra.head()
+
+#%%
 
 # Calculating weighted average of exports of SC over the last 8 years
 pesos = [i / 7 for i in range(8)]
 
 recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:8]
+
 df_recent = df_all_bra.filter(pl.col('year').is_in(recent_years))
 
+#%% 
 weighted_exports = (
     df_recent
     .with_columns([
@@ -82,43 +87,47 @@ weighted_exports = (
          .alias('peso')
     ])
     .with_columns([
-        (pl.col('valor_sc') * pl.col('peso')).alias('weighted_value_sc')
+        (pl.col('valor_uf') * pl.col('peso')).alias('weighted_value_uf')
     ])
-    .group_by(['exporter', 'sh6', 'product_description'])
+    .group_by(['exporter', 'sh6', 'product_description', 'sg_uf'])
     .agg([
-        (pl.sum('weighted_value_sc') / pl.sum('peso')).alias('weighted_exports_sc')
+        (pl.sum('weighted_value_uf') / pl.sum('peso')).alias('weighted_exports_uf')
     ])
 )
 
+weighted_exports.head()
+#%% 
+
 df_all_bra = df_all_bra.join(
-    weighted_exports.select(['exporter', 'sh6', 'weighted_exports_sc']),
-    on=['exporter', 'sh6'],
+    weighted_exports.select(['exporter', 'sh6', 'sg_uf', 'weighted_exports_uf']),
+    on=['exporter', 'sh6', 'sg_uf'],
     how='left'
 )
 
 df_all_bra = df_all_bra.filter(pl.col('year') == 2024)
-
+#%% 
 df_all_bra.head()
+#%% 
 df_all_bra.shape
 
 
-
-
-
-
+#%%
 
 ########## Projecting exports for SC  - HORIZONTE: 2030 ##########
 acc_growth_gdp = 1.202
 
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('weighted_exports_sc') * acc_growth_gdp).alias('proj_exports_sc_2030')
+    (pl.col('weighted_exports_uf') * acc_growth_gdp).alias('proj_exports_uf_2030')
 ])
 
+
+#%% 
 ########## Projecting exports for all countries ##########
 df_gdp_growth = pl.read_excel(references / 'gdp_growth.xlsx')
 
 df_gdp_growth.head()
 
+#%% 
 # Setting the mean GDP growth rate for countries without specific data
 for col in df_gdp_growth.columns:
     if df_gdp_growth[col].null_count() > 0 and df_gdp_growth[col].dtype in [pl.Float64, pl.Int64]:
@@ -140,7 +149,10 @@ df_gdp_growth = df_gdp_growth.with_columns([
 
 df_gdp_growth = df_gdp_growth.select(['ISO', 'gdp_index_2030'])
 
-df_all.head()
+df_gdp_growth.head()
+
+#%% 
+
 df_gdp_growth.head()
 
 # Calculating projected exports for all countries
@@ -158,43 +170,59 @@ df_all = df_all.with_columns([
 ])
 
 
+df_all.head()
 
+#%% 
 
 ########### Calculating the share of SC in overall exports projections ##########
 # Merging SC projections with overall projections
 df_all_bra.head()
+
+#%% 
 df_all.head()
+#%% 
 
 df_all = df_all.join(
-    df_all_bra.select(['exporter', 'sh6', 'proj_exports_sc_2030']),
-    on=['exporter', 'sh6'],
+    df_all_bra.select(['exporter', 'sh6', 'sg_uf', 'proj_exports_uf_2030']),
+    on=['exporter', 'sh6', ],
     how='left'
 )
 
+df_all.head()
+#%% 
+
+
 df_all = df_all.with_columns([
     (
-        pl.col('proj_exports_sc_2030') / pl.sum('proj_exports_2030').over('sh6')
-    ).alias('sc_share_proj_2030')
+        pl.col('proj_exports_uf_2030') / pl.sum('proj_exports_2030').over('sh6')
+    ).alias('uf_share_proj_2030')
 ])
 
-df_supply_sc = df_all.filter(pl.col('sc_share_proj_2030').is_not_null())
+#%%
+df_supply_ufs = df_all.filter(pl.col('uf_share_proj_2030').is_not_null())
 
-df_supply_sc = df_supply_sc.select([
+df_supply_ufs = df_supply_ufs.select([
     'exporter',
     'sh6',
     'product_description',
     'weighted_exports',
-    'proj_exports_sc_2030',
-    'sc_share_proj_2030'
+    'sg_uf',
+    'proj_exports_uf_2030',
+    'uf_share_proj_2030'
 ])
 
-df_supply_sc = df_supply_sc.sort('sc_share_proj_2030', descending=True)
+df_supply_ufs = df_supply_ufs.sort('uf_share_proj_2030', descending=True)
 
-df_supply_sc.head()
+df_supply_ufs.head()
 
-df_supply_sc.write_parquet(data_processed / 'supply_potential_sc.parquet')
+#%% 
 
+df_supply_ufs.write_parquet(data_processed / 'supply_potential_ufs.parquet')
 
+#%%
+
+'''
+#%% !
 
 
 ########### Calculating global tariff disadvantage ##########
@@ -251,3 +279,4 @@ df_tariffs = df_tariffs.group_by('sh6').agg([
 
 df_tariffs.head()
 df_tariffs.shape
+'''

@@ -5,3 +5,4 @@ PENDÊNCIAS DO PROJETO:
 3 - Inclusão das tarifas no modelo.
 4 - Análise da viabilidade de incluir outras dimensões.
 5 - Revisar projeções.
+

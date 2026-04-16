@@ -1,1 +1,1 @@
-Adaptação da metodologia de potencial de exportações desenvolvida pelo ITC para o estado de Santa Catarina.
+Adaptação da metodologia de potencial de exportações desenvolvida pelo ITC para o Brasil, com desagregação por Unidades da Federação (UFs).

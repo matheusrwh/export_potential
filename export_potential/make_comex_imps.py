@@ -1,3 +1,5 @@
+#%% 
+
 import polars as pl
 from pathlib import Path
 
@@ -9,7 +11,7 @@ data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
 
 ######## Loading the data ########
-csv_files = [f for f in data_raw.glob('baci_*.csv')]
+csv_files = [f for f in data_raw.glob('BACI_*.csv')]
 df_list = [pl.read_csv(f) for f in csv_files]
 df_all = pl.concat(df_list)
 
@@ -19,6 +21,8 @@ df_all = df_all.rename({'t': 'year', 'i': 'exporter', 'j': 'importer',
 ######## Mapping countries and products ########
 df_countries = pl.read_csv(references / 'countries.csv')
 df_products = pl.read_csv(references / 'products.csv')
+
+#%% 
 
 df_all = (
     df_all

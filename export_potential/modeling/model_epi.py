@@ -1,3 +1,4 @@
+#%% 
 import polars as pl
 from pathlib import Path
 
@@ -9,10 +10,11 @@ data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
 
+#%% 
 ######## Loading the data ########
-df_ease = pl.read_parquet(data_processed / 'ease_of_trade.parquet')
+df_ease = pl.read_parquet(data_processed / 'ease_of_trade_ufs.parquet')
 df_demand = pl.read_parquet(data_processed / 'demand_potential.parquet')
-df_supply = pl.read_parquet(data_processed / 'supply_potential_sc.parquet')
+df_supply = pl.read_parquet(data_processed / 'supply_potential_ufs.parquet')
 df_bilateral_sh6 = pl.read_parquet(data_interim / 'bilateral_exports_sh6.parquet')
 
 df_ease.head()
@@ -20,22 +22,26 @@ df_demand.head()
 df_supply.head()
 df_bilateral_sh6.head()
 
+
+
+#%%
 df_epi = df_supply.join(
     df_demand.select(['importer', 'sh6', 'projected_import_value']),
     on=['sh6'],
     how='left').join(
-        df_ease.select(['importer', 'ease_of_trade']),
-        on=['importer'],
+        df_ease.select(['importer', 'sg_uf', 'ease_of_trade']),
+        on=['importer', 'sg_uf'],
         how='left').join(
             df_bilateral_sh6,
-            on=['exporter', 'importer', 'sh6'],
+            on=['exporter', 'importer', 'sh6', 'sg_uf'],
             how='left'        
         )
 
 df_epi.head()
 
+#%%
 df_epi = df_epi.with_columns([
-    (pl.col('sc_share_proj_2029') * pl.col('projected_import_value') * pl.col('ease_of_trade')).alias('epi_score')
+    (pl.col('uf_share_proj_2030') * pl.col('projected_import_value') * pl.col('ease_of_trade')).alias('epi_score')
 ])
 
 df_epi = df_epi.sort('epi_score', descending=True)
@@ -44,11 +50,12 @@ df_epi = df_epi.filter(pl.col('epi_score').is_not_nan())
 
 df_epi.head()
 
+#%% 
 #### Normalizing the EPI scores between 0 and 1 ####
 df_epi = df_epi.with_columns([
     pl.col('epi_score').fill_null(0).alias('epi_score'),
-    pl.col('proj_exports_sc_2029').fill_null(0).alias('proj_exports_sc_2029'),
-    pl.col('bilateral_exports_sc_sh6').fill_null(0).alias('bilateral_exports_sc_sh6'),
+    pl.col('proj_exports_uf_2030').fill_null(0).alias('proj_exports_uf_2030'),
+    pl.col('bilateral_exports_uf_sh6').fill_null(0).alias('bilateral_exports_uf_sh6'),
 ])
 
 # Calculate min and max epi_score per sh6
@@ -75,10 +82,14 @@ df_epi = (
 
 df_epi.head()
 
+#%% 
 ################ JOINS E FORMATAÇÃO FINAL ################
 df_countries = pl.read_csv(references / 'countries_br.csv', encoding='latin1', separator=';')
 
 df_countries.head()
+
+#%% 
+
 
 df_epi = df_epi.join(
     df_countries.select([
@@ -92,9 +103,14 @@ df_epi = df_epi.with_columns([
     pl.col('sh6').cast(str).str.zfill(6).alias('sh6')
 ])
 
+df_epi.head()
+
+#%%
+
 df_products = pl.read_excel(references / 'products_br_mdic.xlsx')
 df_products.head()
 
+#%%
 df_epi = df_epi.join(
     df_products,
     left_on='sh6',
@@ -108,9 +124,17 @@ df_epi = df_epi.with_columns([
 
 df_epi = df_epi.rename({'NO_SH6_POR': 'product_description_br'})
 
+df_epi.head()
+
+
+
+#%% 
+
 df_sc_comp = pl.read_excel(references / 'sh6_mundo_comp.xlsx')
 
 df_sc_comp.head()
+
+#%%
 
 df_epi = df_epi.join(
     df_sc_comp,
@@ -150,10 +174,13 @@ df_epi['color'] = df_epi['sc_comp'].apply(lambda x: cores_comp.get(x, '#000000')
 
 df_epi = pl.from_pandas(df_epi)
 
-df_epi = df_epi.select(['exporter', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br', 'sc_comp', 'color',
-                        'bilateral_exports_sc_sh6', 'proj_exports_sc_2029', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
+df_epi = df_epi.select(['exporter', 'sg_uf', 'importer', 'importer_name', 'sh6', 'sh6_product', 'product_description_br', 'sc_comp', 'color',
+                        'bilateral_exports_uf_sh6', 'proj_exports_uf_2030', 'projected_import_value', 'epi_score', 'epi_score_normalized'])
 
 df_epi.head()
+#%%
+
 df_epi.shape
 
+#%%
 df_epi.write_parquet(data_processed / 'epi_scores.parquet')

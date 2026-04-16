@@ -1,15 +1,20 @@
+#%%
+
+import fastexcel
 import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'
 data_interim = project_root / 'data' / 'interim'
 references = project_root / 'references'
 
+#%%
 ######## Loading the data ########
-csv_files = [f for f in data_raw.glob('baci_*.csv')]
+
+csv_files = [f for f in data_raw.glob('BACI_*.csv')]
 df_list = [pl.read_csv(f) for f in csv_files]
 df_all = pl.concat(df_list)
 
@@ -19,6 +24,8 @@ df_all = df_all.rename({'t': 'year', 'i': 'exporter', 'j': 'importer',
 ######## Mapping countries and products ########
 df_countries = pl.read_csv(references / 'countries.csv')
 df_products = pl.read_csv(references / 'products.csv')
+
+#%% 
 
 df_all = (
     df_all
@@ -66,6 +73,8 @@ df_all = (
 )
 
 df_all.head()
+
+#%% 
 
 ############ Treating the data ############
 df_all = df_all.with_columns([
@@ -118,11 +127,23 @@ df_all = df_all.select([
 df_all.head()
 df_all.shape
 
-########### Filtering for SC-SH6 ###########
-df_sh6_sc = pl.read_excel(references / 'share_sc.xlsx')
+#%% 
+
+########### Filtering for UFs-SH6 ###########
+df_shares_ufs = pl.read_csv(
+    references / 'share-ufs.csv',
+    null_values=['null'],
+    schema_overrides={'cd_sh6': pl.Int64},
+)
+
+df_sh6_ufs = (
+    df_shares_ufs
+    .select(pl.col('cd_sh6').cast(pl.Utf8).str.zfill(6).alias('sh6'))
+    .unique()
+)
 
 df_all = df_all.filter(
-    pl.col('sh6').is_in(df_sh6_sc.select(pl.col('sh6')).to_series().implode())
+    pl.col('sh6').is_in(df_sh6_ufs.get_column('sh6'))
 )
 
 df_all.head()

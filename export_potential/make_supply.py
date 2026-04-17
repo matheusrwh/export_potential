@@ -1,6 +1,6 @@
 '''
 ################################################################
-SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 27/03/2026
 ################################################################
 '''
 #%% 
@@ -23,7 +23,7 @@ df_all.head()
 #%% 
 df_shares_uf = pl.read_csv(references / 'share-ufs.csv',
                            null_values=['null'],
-                           schema_overrides={'cd_sh6': pl.String})
+                           schema_overrides={'cd_sh6': pl.Int64})
 
 df_shares_uf.head()
 
@@ -38,7 +38,8 @@ df_all_bra.head()
 #%% 
 
 df_shares_uf = df_shares_uf.with_columns([
-    pl.col('cd_sh6').cast(pl.Int64)
+    pl.col('cd_sh6').cast(pl.Int64),
+    pl.col('nr_ano').cast(pl.Int64)
 ])
 
 df_shares_uf.head()
@@ -170,6 +171,12 @@ df_all = df_all.with_columns([
 ])
 
 
+# Freeze the world denominator before joining UF rows to avoid inflating totals.
+df_world_proj_sh6 = df_all.group_by('sh6').agg([
+    pl.sum('proj_exports_2030').alias('world_proj_exports_2030')
+])
+
+
 df_all.head()
 
 #%% 
@@ -188,13 +195,19 @@ df_all = df_all.join(
     how='left'
 )
 
+df_all = df_all.join(
+    df_world_proj_sh6,
+    on=['sh6'],
+    how='left'
+)
+
 df_all.head()
 #%% 
 
 
 df_all = df_all.with_columns([
     (
-        pl.col('proj_exports_uf_2030') / pl.sum('proj_exports_2030').over('sh6')
+        pl.col('proj_exports_uf_2030') / pl.col('world_proj_exports_2030')
     ).alias('uf_share_proj_2030')
 ])
 

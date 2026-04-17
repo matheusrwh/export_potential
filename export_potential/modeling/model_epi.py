@@ -3,7 +3,7 @@ import polars as pl
 from pathlib import Path
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 app = project_root / 'app'
 data_raw = project_root / 'data' / 'raw'
 data_processed = project_root / 'data' / 'processed'

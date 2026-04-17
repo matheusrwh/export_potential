@@ -6,3 +6,6 @@ PENDÊNCIAS DO PROJETO:
 4 - Análise da viabilidade de incluir outras dimensões.
 5 - Revisar projeções.
 
+!!! - Rodar o modelo completo com os novos resultados + rodar o notebook para validar com a plataforma 
+!!! - adicioanr ao notebook que exporte planilhas de SC para os dois scripts:
+    - potencial por sh6 por pais para comparação 

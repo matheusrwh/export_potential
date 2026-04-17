@@ -1,6 +1,6 @@
 '''
 ################################################################
-SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 27/03/2026
 ################################################################
 '''
 #%% 
@@ -92,10 +92,9 @@ df_all_bra.head()
 df_shares_ufs = pl.read_csv(references / 'share-ufs.csv', 
                             null_values=['null'],
                             schema_overrides={'cd_sh6': pl.Int64},).with_columns([
-    pl.col('cd_sh6').cast(pl.Utf8).alias('sh6'),
-    pl.col('nr_ano').cast(pl.Int64).alias('year'),
-    pl.col('sg_uf').alias('sg_uf'),
-    (pl.col('pct_participacao') / 100.0).alias('share_uf')
+    pl.col('cd_sh6').cast(pl.Int64),
+    pl.col('nr_ano').cast(pl.Int64),
+    pl.col('pct_participacao').alias('share_uf')
 ]).select(['cd_sh6', 'nr_ano', 'sg_uf', 'share_uf'])
 
 df_shares_ufs.head()

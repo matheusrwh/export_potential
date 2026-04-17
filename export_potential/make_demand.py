@@ -1,6 +1,6 @@
 '''
 ################################################################
-SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 07/10/2025
+SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 27/03/2026
 ################################################################
 '''
 #%% 

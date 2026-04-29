@@ -1,0 +1,245 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{setspace}
+\geometry{margin=2.5cm}
+\onehalfspacing
+
+\title{Adaptacao da Metodologia ITC de Potencial de Exportacoes\\para a Realidade Catarinense}
+\author{Projeto Export Potential -- Santa Catarina}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Objetivo do Relatorio}
+Este relatorio documenta a adaptacao da metodologia do ITC (Export Potential Assessment) para o caso de Santa Catarina (SC), com foco em quatro blocos implementados no projeto:
+\begin{itemize}
+    \item \texttt{make\_demand.py} (componente de demanda),
+    \item \texttt{make\_supply.py} (componente de oferta),
+    \item \texttt{make\_ease.py} (componente de facilidade de comercio),
+    \item \texttt{modeling/monetize\_epi\_sc.py} (monetizacao do indice e calculo de potencial realizado/nao realizado).
+\end{itemize}
+
+A logica central preserva a estrutura conceitual do ITC (demanda, oferta e facilidade), mas introduz adaptacoes para um recorte subnacional em que o horizonte de mercado mundial nao e usado como ancora final de valor monetario.
+
+\section{Notacao}
+A notacao adotada no relatorio e:
+\begin{itemize}
+    \item $i$: unidade exportadora (neste caso, $i=SC$),
+    \item $j$: mercado importador,
+    \item $k$: produto (SH6).
+\end{itemize}
+
+Variaveis principais:
+\begin{itemize}
+    \item $M_{jk}^{2024}$: importacao historica ponderada do mercado $j$ para o produto $k$,
+    \item $D_j^{2030}$: indice de crescimento de demanda do mercado $j$ ate 2030,
+    \item $\widehat{M}_{jk}^{2030}$: importacao projetada do mercado $j$ para o produto $k$,
+    \item $X_{SC,k}^{w}$: exportacao historica ponderada de SC no produto $k$,
+    \item $\widehat{X}_{SC,k}^{2030}$: exportacao projetada de SC no produto $k$,
+    \item $s_{SC,k}^{2030}$: participacao projetada de SC no mercado mundial do produto $k$,
+    \item $E_j$: facilidade de comercio de SC no mercado $j$,
+    \item $B_{jk}$: exportacao bilateral observada (ponderada) de SC para $j$ no produto $k$.
+\end{itemize}
+
+\section{Referencial ITC e Adaptacoes}
+\subsection{Estrutura original (ITC)}
+A referencia ITC organiza o potencial de exportacoes em tres dimensoes:
+\begin{enumerate}
+    \item demanda potencial no destino,
+    \item capacidade/competitividade de oferta do exportador,
+    \item facilidade de acesso/comercio.
+\end{enumerate}
+
+\subsection{Adaptacoes para Santa Catarina}
+Nesta adaptacao, os principais ajustes sao:
+\begin{itemize}
+    \item foco subnacional (SC) com base em participacao de SC nas exportacoes brasileiras por SH6,
+    \item uso de projecoes de PIB e populacao para construir demanda ate 2030,
+    \item calibracao de facilidade por historico bilateral revelado de SC,
+    \item monetizacao final ancorada na oferta projetada de SC (e nao em um teto exogeno de mercado mundial agregado).
+\end{itemize}
+
+\section{Componente de Demanda (\texttt{make\_demand.py})}
+\subsection{Passo 1: Projecao de populacao}
+A partir de \texttt{pop\_growth.xlsx}, constroi-se o indice acumulado de populacao ate 2030:
+\begin{equation}
+P_j^{2030} = \prod_{t=2025}^{2030}(1+g_{j,t}^{pop})
+\end{equation}
+
+\subsection{Passo 2: Projecao de PIB}
+Com \texttt{gdp\_growth.xlsx}, calcula-se:
+\begin{equation}
+Y_j^{2030} = \prod_{t=2025}^{2030}(1+g_{j,t}^{gdp})
+\end{equation}
+
+\subsection{Passo 3: PIB per capita e elasticidade-renda}
+\begin{equation}
+\left(\frac{Y}{P}\right)_j^{2030} = \frac{Y_j^{2030}}{P_j^{2030}}
+\end{equation}
+
+Aplica-se a elasticidade media da demanda em relacao ao PIB per capita ($\varepsilon=1{,}201$):
+\begin{equation}
+A_j^{2030} = \left(\left(\frac{Y}{P}\right)_j^{2030}\right)^{\varepsilon}
+\end{equation}
+
+Indice de demanda:
+\begin{equation}
+D_j^{2030} = A_j^{2030} \cdot P_j^{2030}
+\end{equation}
+
+\subsection{Passo 4: Importacao projetada por mercado-produto}
+Com base no historico ponderado de importacoes ($M_{jk}^{2024}$):
+\begin{equation}
+\widehat{M}_{jk}^{2030} = M_{jk}^{2024} \cdot D_j^{2030}
+\end{equation}
+
+\section{Componente de Oferta (\texttt{make\_supply.py})}
+\subsection{Passo 1: Reconstrucao da serie de SC}
+Partindo das exportacoes brasileiras por SH6, usa-se a participacao de SC por produto e ano (arquivo \texttt{share\_sc.xlsx}):
+\begin{equation}
+X_{SC,jk,t} = X_{BRA,jk,t} \cdot share_{SC,k,t}
+\end{equation}
+
+Em seguida, calcula-se media ponderada de 8 anos para estabilizar o sinal de oferta:
+\begin{equation}
+X_{SC,k}^{w} = \frac{\sum_t \omega_t X_{SC,k,t}}{\sum_t \omega_t}
+\end{equation}
+
+\subsection{Passo 2: Projecao de oferta de SC para 2030}
+No script, usa-se um fator acumulado de crescimento do PIB para SC:
+\begin{equation}
+\widehat{X}_{SC,k}^{2030} = X_{SC,k}^{w} \cdot 1{,}202
+\end{equation}
+
+\subsection{Passo 3: Participacao projetada de SC por SH6}
+Tambem se projeta a oferta de todos os exportadores para 2030 e calcula-se a participacao relativa de SC:
+\begin{equation}
+s_{SC,k}^{2030} = \frac{\widehat{X}_{SC,k}^{2030}}{\sum_e \widehat{X}_{e,k}^{2030}}
+\end{equation}
+
+\section{Componente de Facilidade de Comercio (\texttt{make\_ease.py})}
+\subsection{Passo 1: Fluxo bilateral revelado de SC}
+Gera-se $B_{jk}$ como exportacao bilateral historica ponderada de SC por mercado-produto, e $B_j=\sum_k B_{jk}$.
+
+\subsection{Passo 2: Benchmark potencial por destino}
+Define-se um denominador de referencia por mercado:
+\begin{equation}
+S_j = \sum_k \left(M_{jk}^{2024} \cdot s_{SC,k}^{2030}\right)
+\end{equation}
+
+\subsection{Passo 3: Facilidade de comercio}
+\begin{equation}
+E_j = \frac{B_j}{S_j}
+\end{equation}
+
+Interpretacao: quanto maior $E_j$, maior a evidencia de que SC consegue converter potencial tecnico em comercio efetivo naquele destino.
+
+\section{Indice de Potencial (base para monetizacao)}
+No modulo de monetizacao, o score bruto por mercado-produto e:
+\begin{equation}
+W_{jk} = s_{SC,k}^{2030} \cdot \widehat{M}_{jk}^{2030} \cdot E_j
+\end{equation}
+
+Esse termo ja esta em unidade monetaria (US$ ajustados), pois combina uma base monetaria ($\widehat{M}_{jk}^{2030}$) com dois fatores adimensionais.
+
+\section{Monetizacao do EPI e Potencial Nao Realizado (\texttt{monetize\_epi\_sc.py})}
+\subsection{Passo 1: Share de alocacao dentro de cada SH6}
+\begin{equation}
+\alpha_{jk} = \frac{W_{jk}}{\sum_j W_{jk}}
+\end{equation}
+
+\subsection{Passo 2: Alocacao da oferta projetada de SC}
+\begin{equation}
+A_{jk} = \widehat{X}_{SC,k}^{2030} \cdot \alpha_{jk}
+\end{equation}
+
+\subsection{Passo 3: Teto de viabilidade de mercado}
+\begin{equation}
+V_{jk} = W_{jk}
+\end{equation}
+
+\subsection{Passo 4: Potencial monetario factivel}
+\begin{equation}
+P_{jk} = \min(A_{jk}, V_{jk})
+\end{equation}
+
+\subsection{Passo 5: Realizado, nao realizado e utilizacao}
+Com $B_{jk}$ como exportacao observada:
+\begin{align}
+U_{jk} &= \max(P_{jk} - B_{jk}, 0) \\
+R_{jk} &= \min(P_{jk}, B_{jk}) \\
+O_{jk} &= \max(B_{jk} - P_{jk}, 0) \\
+\rho_{jk} &= \begin{cases}
+\frac{B_{jk}}{P_{jk}}, & P_{jk}>0 \\
+0, & P_{jk}=0
+\end{cases}
+\end{align}
+
+onde:
+\begin{itemize}
+    \item $U_{jk}$: potencial nao realizado,
+    \item $R_{jk}$: potencial realizado,
+    \item $O_{jk}$: comercio acima do potencial modelado,
+    \item $\rho_{jk}$: taxa de utilizacao do potencial.
+\end{itemize}
+
+\section{Classificacao em Faixas para Visualizacao}
+O script aplica \textit{k-means} (5 grupos) separadamente para \texttt{potential\_value} e \texttt{unrealized\_potential\_value}, com rotulos ordinais:
+\begin{center}
+Baixo, Medio, Medio-Alto, Alto, Muito Alto.
+\end{center}
+
+Essa etapa e de comunicacao/segmentacao e nao altera os valores monetarios estruturais do potencial.
+
+\section{Hipoteses Metodologicas Principais}
+\begin{enumerate}
+    \item A demanda futura e bem representada por crescimento de populacao e PIB per capita com elasticidade fixa ($\varepsilon=1{,}201$).
+    \item A competitividade relativa de SC por SH6 e capturada pela participacao projetada $s_{SC,k}^{2030}$.
+    \item A facilidade de comercio e inferida por desempenho bilateral historico (efeito revelado).
+    \item O potencial monetario final deve respeitar simultaneamente restricao de oferta (SC) e restricao de viabilidade de mercado.
+    \item O modelo e comparativo-estatico e nao resolve equilibrio geral (preco relativo, substituicao global, feedback competitivo).
+\end{enumerate}
+
+\section{Intuicao Economica dos Componentes}
+\subsection{Demanda}
+A demanda indica \textit{onde o mercado cresce}. Se um pais tende a aumentar importacoes do produto, esse destino ganha peso no potencial.
+
+\subsection{Oferta}
+A oferta indica \textit{o que SC consegue entregar}. Mesmo com demanda alta, o potencial nao pode exceder a capacidade projetada de exportacao de SC por SH6.
+
+\subsection{Facilidade de comercio}
+A facilidade indica \textit{quao convertivel e a oportunidade}. Mercados com historico melhor de penetracao de SC recebem multiplicador maior.
+
+\subsection{Intuicao geral do indicador}
+O potencial monetario $P_{jk}$ e o valor factivel no par mercado-produto. Ele nao e previsao automatica de exportacao, nem incremento garantido.
+
+\begin{itemize}
+    \item \textbf{Potencial realizado} ($R_{jk}$): parte do potencial que ja esta sendo capturada.
+    \item \textbf{Potencial nao realizado} ($U_{jk}$): espaco adicional, dentro das restricoes do modelo.
+\end{itemize}
+
+No agregado, a leitura gerencial recomendada e:
+\begin{enumerate}
+    \item tamanho da fronteira factivel ($\sum_{jk}P_{jk}$),
+    \item quanto ja foi capturado ($\sum_{jk}R_{jk}$),
+    \item quanto ainda e oportunidade ($\sum_{jk}U_{jk}$),
+    \item onde ha risco de sustentacao ($\sum_{jk}O_{jk}$).
+\end{enumerate}
+
+\section{Produtos Gerados no Pipeline}
+No estado atual do projeto, os principais produtos de saida da monetizacao sao:
+\begin{itemize}
+    \item \texttt{data/processed/epi\_monetary\_sc.parquet}
+    \item \texttt{data/processed/epi\_monetary\_sc\_country.parquet}
+    \item \texttt{data/processed/epi\_monetary\_sc\_sh6.parquet}
+\end{itemize}
+
+\end{document}

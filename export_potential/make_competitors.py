@@ -223,3 +223,38 @@ df_all = df_all.with_columns(
 df_all.head()
 
 df_all.write_parquet(data_processed / 'df_competitors.parquet', compression='snappy')
+
+########### Partitioning by importer for frontend ###########
+partition_dir = data_processed / 'df_competitors_by_importer'
+partition_dir.mkdir(parents=True, exist_ok=True)
+
+# Clean previous partition files to avoid stale importers from older runs.
+for old_file in partition_dir.glob('importer=*.parquet'):
+    old_file.unlink()
+
+partitions = df_all.partition_by('importer', as_dict=True, include_key=False, maintain_order=True)
+
+index_rows = []
+
+for importer_key, df_part in partitions.items():
+    importer = importer_key[0] if isinstance(importer_key, tuple) else importer_key
+
+    if importer is None:
+        continue
+
+    file_name = f'importer={importer}.parquet'
+    file_path = partition_dir / file_name
+    df_part.write_parquet(file_path, compression='snappy')
+
+    index_rows.append({
+        'importer': importer,
+        'file_name': file_name,
+        'relative_path': f'data/processed/df_competitors_by_importer/{file_name}',
+        'rows': df_part.height,
+        'sh6_count': df_part.select(pl.col('sh6').n_unique()).item(),
+        'size_bytes': file_path.stat().st_size,
+    })
+
+df_index = pl.DataFrame(index_rows).sort('importer')
+df_index.write_parquet(partition_dir / 'index.parquet', compression='snappy')
+df_index.write_json(partition_dir / 'index.json')

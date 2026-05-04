@@ -45,7 +45,7 @@ def format_pct_ptbr(value: float, decimals: int = 1) -> str:
 
 
 ######## Loading BACI ########
-csv_files = sorted(data_raw.glob("baci_*.csv"))
+csv_files = sorted(data_raw.glob("BACI_*.csv")) + sorted(data_raw.glob("baci_*.csv"))
 df_list = [pl.read_csv(f) for f in csv_files]
 df_raw = pl.concat(df_list)
 

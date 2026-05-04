@@ -1,7 +1,13 @@
 # Data
 data/raw/
 data/interim/
-data/processed/
+
+# Processed data - ignore all except EPI parquets
+data/processed/*
+!data/processed/epi_monetary_ufs.parquet
+!data/processed/epi_monetary_ufs_country.parquet
+!data/processed/epi_monetary_ufs_sh6.parquet
+
 
 # Mac OS-specific storage files
 .DS_Store

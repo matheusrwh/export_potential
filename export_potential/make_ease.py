@@ -3,6 +3,7 @@
 SCRIPT E CÁLCULOS VALIDADOS - MATHEUS SOUZA DA ROSA - 27/03/2026
 ################################################################
 '''
+#%% 
 
 import polars as pl
 from pathlib import Path
@@ -16,16 +17,21 @@ references = project_root / 'references'
 
 #################### ------- BILATERAL EXPORTS ------- ####################
 ######## Loading the data ########
-csv_files = list(data_raw.glob('baci_*.csv'))
+csv_files = list(data_raw.glob('BACI_*.csv'))
 df_list = [pl.read_csv(f) for f in csv_files]
 df_all = pl.concat(df_list)
 
 df_all = df_all.rename({'t': 'year', 'i': 'exporter', 'j': 'importer',
                           'k': 'sh6', 'v': 'value', 'q': 'quantity'})
 
+
+#%% 
+
 ######## Mapping countries and products ########
 df_countries = pl.read_csv(references / 'countries.csv')
 df_products = pl.read_csv(references / 'products.csv')
+
+#%%
 
 df_all = (
     df_all
@@ -75,48 +81,46 @@ df_all = (
 
 df_all.head()
 
-######## Filtering for Brazil and estimating SC share ########
+#%% 
+######## Filtering for Brazil and estimating UF shares in bilateral exports ########
 df_all_bra = df_all.filter(pl.col('exporter') == 'BRA')
 
 df_all_bra.head()
 
-df_shares_sc = pl.read_excel(references / 'share_sc.xlsx')
+#%%
+# Load UF shares and join to bilateral flows
+df_shares_ufs = pl.read_csv(references / 'share-ufs.csv', 
+                            null_values=['null'],
+                            schema_overrides={'cd_sh6': pl.Int64},).with_columns([
+    pl.col('cd_sh6').cast(pl.Int64),
+    pl.col('nr_ano').cast(pl.Int64),
+    pl.col('pct_participacao').alias('share_uf')
+]).select(['cd_sh6', 'nr_ano', 'sg_uf', 'share_uf'])
 
-df_all_bra.head()
-df_shares_sc.head()
+df_shares_ufs.head()
 
-df_shares_sc = df_shares_sc.with_columns([
-    pl.col('sh6').cast(pl.Int64)
-])
-
-df_shares_sc = df_shares_sc.unpivot(
-    index=['sh6'],
-    on=[col for col in df_shares_sc.columns if col != 'sh6'],
-    variable_name='ano',
-    value_name='share_sc'
-)
-
-df_shares_sc = df_shares_sc.with_columns([
-    pl.col('ano').cast(pl.Int64)
-])
-
-df_shares_sc.head()
-
-df_all_bra.head()
-df_all_bra.shape
-
+#%% 
 df_all_bra = df_all_bra.join(
-    df_shares_sc,
+    df_shares_ufs,
     left_on=['sh6', 'year'],
-    right_on=['sh6', 'ano'],
+    right_on=['cd_sh6', 'nr_ano'],
     how='left'
 )
 
+df_all_bra.head()
+
+#%% 
+
 df_all_bra = df_all_bra.with_columns([
-    (pl.col('value') * pl.col('share_sc')).alias('value_sc')
+    (pl.col('value') * pl.col('share_uf')).alias('value_uf')
 ])
 
-# Calculating weighted average of exports of SC over the last 8 years
+df_all_bra.head()
+
+#%% 
+
+
+# Calculating weighted average of exports per UF over the last 8 years
 pesos = [i / 7 for i in range(8)]
 
 recent_years = sorted(df_all_bra['year'].unique(), reverse=True)[:8]
@@ -137,28 +141,37 @@ weighted_exports = (
          .alias('peso')
     ])
     .with_columns([
-        (pl.col('value_sc') * pl.col('peso')).alias('weighted_value_sc')
+        (pl.col('value_uf') * pl.col('peso')).alias('weighted_value_uf')
     ])
-    .group_by(['exporter', 'importer', 'sh6', 'product_description'])
+    .group_by(['exporter', 'importer', 'sh6', 'product_description', 'sg_uf'])
     .agg([
-        (pl.sum('weighted_value_sc') / pl.sum('peso')).alias('weighted_exports_sc')
+        (pl.sum('weighted_value_uf') / pl.sum('peso')).alias('weighted_exports_uf')
     ])
 )
 
+df_recent.head()    
+#%% 
+
 df_all_bra = df_all_bra.join(
-    weighted_exports.select(['exporter', 'importer', 'sh6', 'weighted_exports_sc']),
-    on=['exporter', 'importer', 'sh6'],
+    weighted_exports.select(['exporter', 'importer', 'sh6', 'sg_uf', 'weighted_exports_uf']),
+    on=['exporter', 'importer', 'sh6', 'sg_uf'],
     how='left'
 )
 
+df_all_bra.head()
+#%% 
+
 df_all_bra = df_all_bra.filter(pl.col('year') == 2024)
 
-df_bilateral = df_all_bra.group_by(['exporter', 'importer']).agg([
-    pl.sum('weighted_exports_sc').alias('bilateral_exports_sc')
+df_bilateral = df_all_bra.group_by(['exporter', 'importer', 'sg_uf']).agg([
+    pl.sum('weighted_exports_uf').alias('bilateral_exports_uf')
 ])
 
-df_bilateral_sh6 = df_all_bra.group_by(['exporter', 'importer', 'sh6']).agg([
-    pl.sum('weighted_exports_sc').alias('bilateral_exports_sc_sh6')
+df_bilateral.head()
+#%% 
+
+df_bilateral_sh6 = df_all_bra.group_by(['exporter', 'importer', 'sh6', 'sg_uf']).agg([
+    pl.sum('weighted_exports_uf').alias('bilateral_exports_uf_sh6')
 ])
 
 df_bilateral.head()
@@ -166,31 +179,38 @@ df_bilateral_sh6.head()
 
 df_bilateral_sh6.write_parquet(data_interim / 'bilateral_exports_sh6.parquet')
 
+df_bilateral_sh6.head()
+
+#%% 
+
 #################### ------- SUPPLY AND DEMAND ------- ####################
 df_demand = pl.read_parquet(data_processed / 'demand_potential.parquet')
-df_supply_sc = pl.read_parquet(data_processed / 'supply_potential_sc.parquet')
+df_supply_ufs = pl.read_parquet(data_processed / 'supply_potential_ufs.parquet')
 
 df_demand.head()
-df_supply_sc.head()
+df_supply_ufs.head()
 
+#%% 
+
+# Join demand with UF shares (creates a row per sg_uf/sh6)
 df_demand = df_demand.join(
-    df_supply_sc.select(['sh6', 'sc_share_proj_2030']),
+    df_supply_ufs.select(['sh6', 'sg_uf', 'uf_share_proj_2030']),
     on='sh6',
     how='left'
 )
 
 df_ease = df_demand.select(['importer', 'sh6', 'product_description',
-                            'weighted_imports', 'sc_share_proj_2030'])
+                            'weighted_imports', 'sg_uf', 'uf_share_proj_2030'])
 
 df_ease = df_ease.with_columns([
-    (pl.col('weighted_imports') * pl.col('sc_share_proj_2030')).alias('value_sc')
+    (pl.col('weighted_imports') * pl.col('uf_share_proj_2030')).alias('value_uf')
 ])
 
-df_ease = df_ease.group_by(['importer']).agg([
-    pl.sum('value_sc').alias('sum_value_sc')
+df_ease = df_ease.group_by(['importer', 'sg_uf']).agg([
+    pl.sum('value_uf').alias('sum_value_uf')
 ])
 
-df_ease = df_ease.sort('sum_value_sc', descending=True)
+df_ease = df_ease.sort('sum_value_uf', descending=True)
 
 df_ease.head()
 
@@ -202,21 +222,22 @@ df_ease.head()
 
 df_ease = df_ease.join(
     df_bilateral,
-    left_on='importer',
-    right_on='importer',
+    left_on=['importer', 'sg_uf'],
+    right_on=['importer', 'sg_uf'],
     how='left'
 )
 
 df_ease.head()
 
 df_ease = df_ease.with_columns([
-    (pl.col('bilateral_exports_sc') / pl.col('sum_value_sc')).alias('ease_of_trade')
+    (pl.col('bilateral_exports_uf') / pl.col('sum_value_uf')).alias('ease_of_trade')
 ])
 
 df_ease = df_ease.select([
-    'exporter',
     'importer',
+    'sg_uf',
     'ease_of_trade'
 ])
 
-df_ease.write_parquet(data_processed / 'ease_of_trade.parquet')
+
+df_ease.write_parquet(data_processed / 'ease_of_trade_ufs.parquet')

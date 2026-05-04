@@ -17,7 +17,7 @@ from sklearn.cluster import KMeans
 
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 references = project_root / "references"
@@ -34,45 +34,54 @@ def finite_or_zero(column: str) -> pl.Expr:
     )
 
 
-def add_kmeans_category(df: pl.DataFrame, value_col: str, output_col: str) -> pl.DataFrame:
+def add_kmeans_category(
+    df: pl.DataFrame, value_col: str, output_col: str, group_col: str = "sg_uf"
+) -> pl.DataFrame:
     labels = ["Baixo", "Médio", "Médio-Alto", "Alto", "Muito Alto"]
 
-    values = (
-        df.get_column(value_col)
-        .fill_null(0.0)
-        .fill_nan(0.0)
-        .to_numpy()
-        .reshape(-1, 1)
-    )
+    def apply_kmeans(group_df: pl.DataFrame) -> pl.DataFrame:
+        values = (
+            group_df.get_column(value_col)
+            .fill_null(0.0)
+            .fill_nan(0.0)
+            .to_numpy()
+            .reshape(-1, 1)
+        )
 
-    if len(values) == 0:
-        return df.with_columns(pl.lit(None).cast(pl.Utf8).alias(output_col))
+        if len(values) == 0:
+            return group_df.with_columns(pl.lit(None).cast(pl.Utf8).alias(output_col))
 
-    n_clusters = 5 if len(values) >= 5 else len(values)
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=20)
-    cluster_ids = kmeans.fit_predict(values)
+        n_clusters = 5 if len(values) >= 5 else len(values)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=20)
+        cluster_ids = kmeans.fit_predict(values)
 
-    centers = kmeans.cluster_centers_.flatten()
-    cluster_order = np.argsort(centers)
-    cluster_to_rank = {int(cluster): rank for rank, cluster in enumerate(cluster_order)}
-    ranks = np.array([cluster_to_rank[int(c)] for c in cluster_ids])
+        centers = kmeans.cluster_centers_.flatten()
+        cluster_order = np.argsort(centers)
+        cluster_to_rank = {int(cluster): rank for rank, cluster in enumerate(cluster_order)}
+        ranks = np.array([cluster_to_rank[int(c)] for c in cluster_ids])
 
-    if n_clusters < 5 and n_clusters > 1:
-        scaled_ranks = np.rint(ranks * (4 / (n_clusters - 1))).astype(int)
-    elif n_clusters == 1:
-        scaled_ranks = np.zeros(len(ranks), dtype=int)
-    else:
-        scaled_ranks = ranks
+        if n_clusters < 5 and n_clusters > 1:
+            scaled_ranks = np.rint(ranks * (4 / (n_clusters - 1))).astype(int)
+        elif n_clusters == 1:
+            scaled_ranks = np.zeros(len(ranks), dtype=int)
+        else:
+            scaled_ranks = ranks
 
-    scaled_ranks = np.clip(scaled_ranks, 0, 4)
-    categories = [labels[int(rank)] for rank in scaled_ranks]
-    return df.with_columns(pl.Series(output_col, categories))
+        scaled_ranks = np.clip(scaled_ranks, 0, 4)
+        categories = [labels[int(rank)] for rank in scaled_ranks]
+        return group_df.with_columns(pl.Series(output_col, categories))
+
+    # Apply KMeans inside each UF to avoid cross-UF dominance in categories.
+    return df.group_by(group_col).map_groups(apply_kmeans)
 
 
-def add_export_categories(df: pl.DataFrame) -> pl.DataFrame:
-    df = add_kmeans_category(df, "potential_value", "potential_category")
+def add_export_categories(df: pl.DataFrame, group_col: str = "sg_uf") -> pl.DataFrame:
+    df = add_kmeans_category(df, "potential_value", "potential_category", group_col)
     df = add_kmeans_category(
-        df, "unrealized_potential_value", "unrealized_potential_category"
+        df,
+        "unrealized_potential_value",
+        "unrealized_potential_category",
+        group_col,
     )
     return df
 
@@ -292,10 +301,10 @@ df_country = (
             "potential_utilization_ratio",
         ]
     )
-    .sort("unrealized_potential_value", descending=True)
 )
 
 df_country = add_export_categories(df_country)
+df_country = df_country.sort("unrealized_potential_value", descending=True)
 
 df_country.write_parquet(data_processed / "epi_monetary_ufs_country.parquet")
 
@@ -334,9 +343,9 @@ df_product = (
             "potential_utilization_ratio",
         ]
     )
-    .sort("unrealized_potential_value", descending=True)
 )
 
 df_product = add_export_categories(df_product)
+df_product = df_product.sort("unrealized_potential_value", descending=True)
 
 df_product.write_parquet(data_processed / "epi_monetary_ufs_sh6.parquet")

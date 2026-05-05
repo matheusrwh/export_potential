@@ -17,7 +17,7 @@ from sklearn.cluster import KMeans
 
 
 ######## Setting the directories ########
-project_root = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
 data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 references = project_root / "references"
@@ -84,6 +84,49 @@ def add_export_categories(df: pl.DataFrame, group_col: str = "sg_uf") -> pl.Data
         group_col,
     )
     return df
+
+
+def write_partitioned_by_uf(
+    df: pl.DataFrame,
+    partition_dir: Path,
+    relative_base: str,
+) -> None:
+    partition_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean previous partition files to avoid stale UFs from older runs.
+    for old_file in partition_dir.glob("sg_uf=*.parquet"):
+        old_file.unlink()
+
+    partitions = df.partition_by("sg_uf", as_dict=True, include_key=False, maintain_order=True)
+
+    index_rows = []
+
+    for uf_key, df_part in partitions.items():
+        sg_uf = uf_key[0] if isinstance(uf_key, tuple) else uf_key
+
+        if sg_uf is None:
+            continue
+
+        file_name = f"sg_uf={sg_uf}.parquet"
+        file_path = partition_dir / file_name
+        df_part.write_parquet(file_path, compression="snappy")
+
+        row = {
+            "sg_uf": sg_uf,
+            "file_name": file_name,
+            "relative_path": f"{relative_base}/{file_name}",
+            "rows": df_part.height,
+            "size_bytes": file_path.stat().st_size,
+        }
+
+        if "sh6" in df_part.columns:
+            row["sh6_count"] = df_part.select(pl.col("sh6").n_unique()).item()
+
+        index_rows.append(row)
+
+    df_index = pl.DataFrame(index_rows).sort("sg_uf")
+    df_index.write_parquet(partition_dir / "index.parquet", compression="snappy")
+    df_index.write_json(partition_dir / "index.json")
 
 
 ######## Loading the data ########
@@ -265,6 +308,9 @@ df_out = add_export_categories(df_out)
 
 df_out.write_parquet(data_processed / "epi_monetary_ufs.parquet")
 
+partition_dir = data_processed / "epi_monetary_ufs_by_uf"
+write_partitioned_by_uf(df_out, partition_dir, "data/processed/epi_monetary_ufs_by_uf")
+
 ######## Saving aggregated outputs ########
 df_country = (
     df.group_by(["importer", "sg_uf"])
@@ -308,6 +354,13 @@ df_country = df_country.sort("unrealized_potential_value", descending=True)
 
 df_country.write_parquet(data_processed / "epi_monetary_ufs_country.parquet")
 
+partition_dir = data_processed / "epi_monetary_ufs_country_by_uf"
+write_partitioned_by_uf(
+    df_country,
+    partition_dir,
+    "data/processed/epi_monetary_ufs_country_by_uf",
+)
+
 df_product = (
     df.group_by(["sh6", "sg_uf"])
     .agg(
@@ -349,3 +402,10 @@ df_product = add_export_categories(df_product)
 df_product = df_product.sort("unrealized_potential_value", descending=True)
 
 df_product.write_parquet(data_processed / "epi_monetary_ufs_sh6.parquet")
+
+partition_dir = data_processed / "epi_monetary_ufs_sh6_by_uf"
+write_partitioned_by_uf(
+    df_product,
+    partition_dir,
+    "data/processed/epi_monetary_ufs_sh6_by_uf",
+)

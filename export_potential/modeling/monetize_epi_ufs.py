@@ -22,6 +22,8 @@ data_processed = project_root / "data" / "processed"
 data_interim = project_root / "data" / "interim"
 references = project_root / "references"
 
+BRAZIL_CODE = "BR"
+
 
 def finite_or_zero(column: str) -> pl.Expr:
     return (
@@ -84,6 +86,10 @@ def add_export_categories(df: pl.DataFrame, group_col: str = "sg_uf") -> pl.Data
         group_col,
     )
     return df
+
+
+def add_brazil_aggregate_flag(df: pl.DataFrame, is_brazil: bool) -> pl.DataFrame:
+    return df.with_columns(pl.lit(is_brazil).alias("is_brazil_aggregate"))
 
 
 def write_partitioned_by_uf(
@@ -287,9 +293,10 @@ final_columns = [
     "potential_utilization_ratio",
     "potential_category",
     "unrealized_potential_category",
+    "is_brazil_aggregate",
 ]
 
-df_out = df.select(
+df_out_base = df.select(
     [
         "exporter",
         "importer",
@@ -304,7 +311,49 @@ df_out = df.select(
     ]
 )
 
-df_out = add_export_categories(df_out)
+df_out = add_export_categories(df_out_base)
+df_out = add_brazil_aggregate_flag(df_out, False)
+
+df_out_br = (
+    df_out_base.group_by(["exporter", "sg_uf", "sh6"])
+    .agg(
+        [
+            pl.col("product_description_br").first().alias("product_description_br"),
+            pl.col("sc_comp").first().alias("sc_comp"),
+            pl.sum("potential_value").alias("potential_value"),
+            pl.sum("unrealized_potential_value").alias("unrealized_potential_value"),
+            pl.sum("bilateral_exports_uf_sh6").alias("bilateral_exports_uf_sh6"),
+        ]
+    )
+    .with_columns(
+        [
+            pl.lit(BRAZIL_CODE).alias("importer"),
+            pl.when(pl.col("potential_value") > 0)
+            .then(pl.col("bilateral_exports_uf_sh6") / pl.col("potential_value"))
+            .otherwise(0.0)
+            .alias("potential_utilization_ratio"),
+        ]
+    )
+    .select(
+        [
+            "exporter",
+            "importer",
+            "sg_uf",
+            "sh6",
+            "product_description_br",
+            "sc_comp",
+            "potential_value",
+            "unrealized_potential_value",
+            "bilateral_exports_uf_sh6",
+            "potential_utilization_ratio",
+        ]
+    )
+)
+
+df_out_br = add_export_categories(df_out_br)
+df_out_br = add_brazil_aggregate_flag(df_out_br, True)
+
+df_out = pl.concat([df_out, df_out_br], how="vertical")
 
 df_out.write_parquet(data_processed / "epi_monetary_ufs.parquet")
 
@@ -312,7 +361,7 @@ partition_dir = data_processed / "epi_monetary_ufs_by_uf"
 write_partitioned_by_uf(df_out, partition_dir, "data/processed/epi_monetary_ufs_by_uf")
 
 ######## Saving aggregated outputs ########
-df_country = (
+df_country_base = (
     df.group_by(["importer", "sg_uf"])
     .agg(
         [
@@ -349,7 +398,50 @@ df_country = (
     )
 )
 
-df_country = add_export_categories(df_country)
+df_country = add_export_categories(df_country_base)
+df_country = add_brazil_aggregate_flag(df_country, False)
+
+df_country_br = (
+    df_country_base.group_by(["exporter", "sg_uf"])
+    .agg(
+        [
+            pl.sum("potential_value").alias("potential_value"),
+            pl.sum("unrealized_potential_value").alias("unrealized_potential_value"),
+            pl.sum("bilateral_exports_uf").alias("bilateral_exports_uf"),
+        ]
+    )
+    .with_columns(
+        [
+            pl.lit(BRAZIL_CODE).alias("importer"),
+            pl.lit(None).cast(pl.Utf8).alias("sh6"),
+            pl.lit(None).cast(pl.Utf8).alias("product_description_br"),
+            pl.lit(None).cast(pl.Utf8).alias("sc_comp"),
+            pl.when(pl.col("potential_value") > 0)
+            .then(pl.col("bilateral_exports_uf") / pl.col("potential_value"))
+            .otherwise(0.0)
+            .alias("potential_utilization_ratio"),
+        ]
+    )
+    .select(
+        [
+            "exporter",
+            "importer",
+            "sg_uf",
+            "sh6",
+            "product_description_br",
+            "sc_comp",
+            "potential_value",
+            "bilateral_exports_uf",
+            "unrealized_potential_value",
+            "potential_utilization_ratio",
+        ]
+    )
+)
+
+df_country_br = add_export_categories(df_country_br)
+df_country_br = add_brazil_aggregate_flag(df_country_br, True)
+
+df_country = pl.concat([df_country, df_country_br], how="vertical")
 df_country = df_country.sort("unrealized_potential_value", descending=True)
 
 df_country.write_parquet(data_processed / "epi_monetary_ufs_country.parquet")
@@ -375,7 +467,7 @@ df_product = (
     )
     .with_columns(
         [
-            pl.lit(None).cast(pl.Utf8).alias("importer"),
+            pl.lit(BRAZIL_CODE).cast(pl.Utf8).alias("importer"),
             pl.when(pl.col("potential_value") > 0)
             .then(pl.col("bilateral_exports_uf_sh6") / pl.col("potential_value"))
             .otherwise(0.0)
@@ -399,6 +491,7 @@ df_product = (
 )
 
 df_product = add_export_categories(df_product)
+df_product = add_brazil_aggregate_flag(df_product, True)
 df_product = df_product.sort("unrealized_potential_value", descending=True)
 
 df_product.write_parquet(data_processed / "epi_monetary_ufs_sh6.parquet")

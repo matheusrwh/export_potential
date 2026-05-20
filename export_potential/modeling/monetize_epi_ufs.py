@@ -92,6 +92,37 @@ def add_brazil_aggregate_flag(df: pl.DataFrame, is_brazil: bool) -> pl.DataFrame
     return df.with_columns(pl.lit(is_brazil).alias("is_brazil_aggregate"))
 
 
+def build_brazil_uf_aggregate(df: pl.DataFrame, exports_col: str) -> pl.DataFrame:
+    """Soma as 27 UFs em uma UF artificial sg_uf='BR' (Brasil agregado)."""
+    # Mantem is_brazil_aggregate como chave para nao misturar linhas por
+    # mercado real com a agregacao sobre importadores (importer='BR').
+    df_br = (
+        df.group_by(["exporter", "importer", "sh6", "is_brazil_aggregate"])
+        .agg(
+            [
+                pl.col("product_description_br").first().alias("product_description_br"),
+                pl.col("sc_comp").first().alias("sc_comp"),
+                pl.sum("potential_value").alias("potential_value"),
+                pl.sum("unrealized_potential_value").alias("unrealized_potential_value"),
+                pl.sum(exports_col).alias(exports_col),
+            ]
+        )
+        .with_columns(
+            [
+                pl.lit(BRAZIL_CODE).alias("sg_uf"),
+                pl.when(pl.col("potential_value") > 0)
+                .then(pl.col(exports_col) / pl.col("potential_value"))
+                .otherwise(0.0)
+                .alias("potential_utilization_ratio"),
+            ]
+        )
+    )
+
+    # Categorias recalculadas dentro da UF BR, separadas por tipo de agregacao.
+    df_br = add_export_categories(df_br, group_col="is_brazil_aggregate")
+    return df_br.select(df.columns)
+
+
 def write_partitioned_by_uf(
     df: pl.DataFrame,
     partition_dir: Path,
@@ -354,6 +385,10 @@ df_out_br = add_export_categories(df_out_br)
 df_out_br = add_brazil_aggregate_flag(df_out_br, True)
 
 df_out = pl.concat([df_out, df_out_br], how="vertical")
+df_out = pl.concat(
+    [df_out, build_brazil_uf_aggregate(df_out, "bilateral_exports_uf_sh6")],
+    how="vertical",
+)
 
 df_out.write_parquet(data_processed / "epi_monetary_ufs.parquet")
 
@@ -442,6 +477,10 @@ df_country_br = add_export_categories(df_country_br)
 df_country_br = add_brazil_aggregate_flag(df_country_br, True)
 
 df_country = pl.concat([df_country, df_country_br], how="vertical")
+df_country = pl.concat(
+    [df_country, build_brazil_uf_aggregate(df_country, "bilateral_exports_uf")],
+    how="vertical",
+)
 df_country = df_country.sort("unrealized_potential_value", descending=True)
 
 df_country.write_parquet(data_processed / "epi_monetary_ufs_country.parquet")
@@ -492,6 +531,10 @@ df_product = (
 
 df_product = add_export_categories(df_product)
 df_product = add_brazil_aggregate_flag(df_product, True)
+df_product = pl.concat(
+    [df_product, build_brazil_uf_aggregate(df_product, "bilateral_exports_uf_sh6")],
+    how="vertical",
+)
 df_product = df_product.sort("unrealized_potential_value", descending=True)
 
 df_product.write_parquet(data_processed / "epi_monetary_ufs_sh6.parquet")
